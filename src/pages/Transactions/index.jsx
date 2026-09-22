@@ -23,6 +23,7 @@ import {
 import html2pdf from 'html2pdf.js';
 import { useTransactions } from '../../context/TransactionContext';
 import { useSettings } from '../../context/SettingsContext';
+import { useExpenses } from '../../context/ExpenseContext';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -44,6 +45,7 @@ export const TransactionsPage = () => {
   const { transactions, setActiveReceipt, clearHistory } = useTransactions();
   const { settings } = useSettings();
   const { user, isAdmin } = useAuth();
+  const { expenses } = useExpenses();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMethod, setSelectedMethod] = useState('ALL');
@@ -195,6 +197,88 @@ export const TransactionsPage = () => {
       totalCup,
     };
   }, [filteredTransactions]);
+
+  // Filter data pengeluaran berdasarkan periode waktu yang dipilih
+  const filteredExpenses = useMemo(() => {
+    return (expenses || []).filter((exp) => {
+      if (!exp.timestamp) return false;
+      const expDate = new Date(exp.timestamp);
+
+      if (dateFilter === 'TODAY') {
+        return isToday(exp.timestamp);
+      } else if (dateFilter === 'YESTERDAY') {
+        return isYesterday(exp.timestamp);
+      } else if (dateFilter === 'LAST_7_DAYS') {
+        const now = new Date();
+        const start = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() - 6,
+          0,
+          0,
+          0,
+          0
+        );
+        const end = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate(),
+          23,
+          59,
+          59,
+          999
+        );
+        return expDate >= start && expDate <= end;
+      } else if (dateFilter === 'LAST_30_DAYS') {
+        const now = new Date();
+        const start = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() - 29,
+          0,
+          0,
+          0,
+          0
+        );
+        const end = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate(),
+          23,
+          59,
+          59,
+          999
+        );
+        return expDate >= start && expDate <= end;
+      } else if (dateFilter === 'CUSTOM') {
+        if (customStartDate && customEndDate) {
+          const s = new Date(customStartDate + 'T00:00:00');
+          const e = new Date(customEndDate + 'T23:59:59.999');
+          return expDate >= s && expDate <= e;
+        } else if (customStartDate) {
+          const s = new Date(customStartDate + 'T00:00:00');
+          return expDate >= s;
+        } else if (customEndDate) {
+          const e = new Date(customEndDate + 'T23:59:59.999');
+          return expDate <= e;
+        }
+      }
+      return true;
+    });
+  }, [expenses, dateFilter, customStartDate, customEndDate]);
+
+  // Total nominal pengeluaran untuk periode terpilih
+  const totalPengeluaran = useMemo(() => {
+    return filteredExpenses.reduce(
+      (sum, exp) => sum + (Number(exp.amount) || 0),
+      0
+    );
+  }, [filteredExpenses]);
+
+  // Total Pendapatan Bersih (Omzet dikurangi Pengeluaran)
+  const totalPendapatanBersih = useMemo(() => {
+    return summary.totalOmzet - totalPengeluaran;
+  }, [summary.totalOmzet, totalPengeluaran]);
 
   // Menu sales breakdown for the filtered period
   const menuBreakdown = useMemo(() => {
@@ -507,7 +591,7 @@ export const TransactionsPage = () => {
       </Card>
 
       {/* Mini Summary Cards of Filtered Transactions */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="bg-white border border-slate-200/80 rounded-2xl p-3 shadow-xs">
           <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
             Total {summary.count} Transaksi
@@ -541,6 +625,24 @@ export const TransactionsPage = () => {
           </p>
           <p className="text-base sm:text-lg font-black text-slate-900 mt-0.5">
             {summary.totalCup}
+          </p>
+        </div>
+
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-3 shadow-xs">
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            Pengeluaran
+          </p>
+          <p className="text-base sm:text-lg font-black text-slate-900 mt-0.5">
+            {formatIDR(totalPengeluaran)}
+          </p>
+        </div>
+
+        <div className="bg-puko-600 rounded-2xl p-3 border border-puko-700/60 text-white">
+          <p className="text-[11px] font-bold text-puko-100 uppercase tracking-wider">
+            Pendapatan Bersih
+          </p>
+          <p className="text-base sm:text-lg font-black text-white mt-0.5">
+            {formatIDR(totalPendapatanBersih)}
           </p>
         </div>
       </div>
@@ -899,12 +1001,12 @@ export const TransactionsPage = () => {
                 </div>
               </div>
 
-              {/* 4 KPI Ringkasan Keuangan */}
+              {/* 6 KPI Ringkasan Keuangan */}
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(4, 1fr)',
-                  gap: '10px',
+                  gridTemplateColumns: 'repeat(6, 1fr)',
+                  gap: '6px',
                   marginBottom: '20px',
                 }}
               >
@@ -912,23 +1014,23 @@ export const TransactionsPage = () => {
                   style={{
                     border: '1px solid #bbf7d0',
                     borderRadius: '8px',
-                    padding: '10px',
+                    padding: '8px',
                     backgroundColor: '#f0fdf4',
                   }}
                 >
                   <div
                     style={{
-                      fontSize: '9px',
+                      fontSize: '8px',
                       color: '#166534',
                       fontWeight: '800',
                       textTransform: 'uppercase',
                     }}
                   >
-                    Total Omzet Bersih
+                    Total Omzet
                   </div>
                   <div
                     style={{
-                      fontSize: '15px',
+                      fontSize: '12px',
                       fontWeight: '800',
                       color: '#14532d',
                       marginTop: '3px',
@@ -942,23 +1044,23 @@ export const TransactionsPage = () => {
                   style={{
                     border: '1px solid #fde68a',
                     borderRadius: '8px',
-                    padding: '10px',
+                    padding: '8px',
                     backgroundColor: '#fffbeb',
                   }}
                 >
                   <div
                     style={{
-                      fontSize: '9px',
+                      fontSize: '8px',
                       color: '#92400e',
                       fontWeight: '800',
                       textTransform: 'uppercase',
                     }}
                   >
-                    Pembayaran Tunai
+                    Tunai
                   </div>
                   <div
                     style={{
-                      fontSize: '15px',
+                      fontSize: '12px',
                       fontWeight: '800',
                       color: '#78350f',
                       marginTop: '3px',
@@ -972,23 +1074,23 @@ export const TransactionsPage = () => {
                   style={{
                     border: '1px solid #bae6fd',
                     borderRadius: '8px',
-                    padding: '10px',
+                    padding: '8px',
                     backgroundColor: '#f0f9ff',
                   }}
                 >
                   <div
                     style={{
-                      fontSize: '9px',
+                      fontSize: '8px',
                       color: '#075985',
                       fontWeight: '800',
                       textTransform: 'uppercase',
                     }}
                   >
-                    Pembayaran QRIS
+                    QRIS
                   </div>
                   <div
                     style={{
-                      fontSize: '15px',
+                      fontSize: '12px',
                       fontWeight: '800',
                       color: '#0c4a6e',
                       marginTop: '3px',
@@ -1002,29 +1104,90 @@ export const TransactionsPage = () => {
                   style={{
                     border: '1px solid #e9d5ff',
                     borderRadius: '8px',
-                    padding: '10px',
+                    padding: '8px',
                     backgroundColor: '#faf5ff',
                   }}
                 >
                   <div
                     style={{
-                      fontSize: '9px',
+                      fontSize: '8px',
                       color: '#6b21a8',
                       fontWeight: '800',
                       textTransform: 'uppercase',
                     }}
                   >
-                    Total Cup Terjual
+                    Total Cup
                   </div>
                   <div
                     style={{
-                      fontSize: '15px',
+                      fontSize: '12px',
                       fontWeight: '800',
                       color: '#581c87',
                       marginTop: '3px',
                     }}
                   >
                     {summary.totalCup} Cup
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    border: '1px solid #fecdd3',
+                    borderRadius: '8px',
+                    padding: '8px',
+                    backgroundColor: '#fff1f2',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: '8px',
+                      color: '#be123c',
+                      fontWeight: '800',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Pengeluaran
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      color: '#9f1239',
+                      marginTop: '3px',
+                    }}
+                  >
+                    {formatIDR(totalPengeluaran)}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    borderRadius: '8px',
+                    padding: '8px',
+                    backgroundColor: '#2f7e49',
+                    border: '1px solid #27643b',
+                    color: '#ffffff',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: '8px',
+                      color: '#e1f2e6',
+                      fontWeight: '800',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Pendapatan Bersih
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      color: '#ffffff',
+                      marginTop: '3px',
+                    }}
+                  >
+                    {formatIDR(totalPendapatanBersih)}
                   </div>
                 </div>
               </div>

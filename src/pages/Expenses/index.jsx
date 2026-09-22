@@ -213,20 +213,20 @@ export const ExpensesPage = () => {
                 onClick={() => setSelectedDate(day.dateStr)}
                 className={`py-1.5 px-0.5 sm:py-2 sm:px-1 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer select-none text-center ${
                   isSelected
-                    ? 'border-2 border-puko-600 bg-puko-50 text-puko-800 shadow-md shadow-puko-600/35 ring-1 ring-puko-500/25'
+                    ? 'border border-puko-700/60 bg-puko-600 text-white'
                     : 'border border-slate-200/80 bg-slate-50/80 hover:bg-slate-100 text-slate-600'
                 }`}
               >
                 <span
                   className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${
-                    isSelected ? 'text-puko-700 font-extrabold' : 'text-slate-400'
+                    isSelected ? 'text-puko-100 font-bold' : 'text-slate-400'
                   }`}
                 >
                   {day.dayName}
                 </span>
                 <span
                   className={`text-xs sm:text-sm mt-0.5 ${
-                    isSelected ? 'text-puko-900 font-black' : 'text-slate-700 font-bold'
+                    isSelected ? 'text-white font-black' : 'text-slate-700 font-bold'
                   }`}
                 >
                   {day.dayNumber}

@@ -31,6 +31,7 @@ import {
 import { useTransactions } from '../../context/TransactionContext';
 import { useProducts } from '../../context/ProductContext';
 import { useSettings } from '../../context/SettingsContext';
+import { useExpenses } from '../../context/ExpenseContext';
 import { StatCard } from '../../components/common/StatCard';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -186,53 +187,110 @@ export const DashboardPage = () => {
   const { transactions, setActiveReceipt } = useTransactions();
   const { products } = useProducts();
   const { settings } = useSettings();
+  const { expenses } = useExpenses();
 
   const [metricMode, setMetricMode] = useState('omzet'); // 'omzet' or 'cup'
 
-  // 1. Filter Transaksi Hari Ini
+  // Generate past 7 days ending today (1 minggu ke belakang)
+  const past7Days = useMemo(() => {
+    const days = [];
+    const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+    const now = new Date();
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+
+      days.push({
+        dateStr,
+        dayName: DAY_NAMES[d.getDay()], // e.g. "Jum", "Sab"
+        dayNumber: d.getDate(), // e.g. 17, 18
+        isToday: i === 0,
+      });
+    }
+    return days;
+  }, []);
+
+  const todayDateStr = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  const [selectedDate, setSelectedDate] = useState(todayDateStr);
+
+  const isSameDate = (isoString, targetDateStr) => {
+    if (!isoString || !targetDateStr) return false;
+    const d = new Date(isoString);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}` === targetDateStr;
+  };
+
+  // 1. Filter Transaksi pada Tanggal yang Dipilih
+  const selectedTransactions = useMemo(() => {
+    return transactions.filter((tx) => isSameDate(tx.timestamp, selectedDate));
+  }, [transactions, selectedDate]);
+
+  // Transaksi Hari Ini
   const todayTransactions = useMemo(() => {
-    return transactions.filter((tx) => isToday(tx.timestamp));
-  }, [transactions]);
+    return transactions.filter((tx) => isSameDate(tx.timestamp, todayDateStr));
+  }, [transactions, todayDateStr]);
 
-  // 2. Total Transaksi Hari Ini
-  const totalTransaksiHariIni = todayTransactions.length;
+  // 2. Total Transaksi Terpilih (Keseluruhan transaksi: QRIS + Tunai)
+  const totalTransaksiTerpilih = selectedTransactions.length;
 
-  // 3. Total Pendapatan Hari Ini
-  const totalPendapatanHariIni = useMemo(() => {
-    return todayTransactions.reduce((sum, tx) => sum + (tx.total || 0), 0);
-  }, [todayTransactions]);
+  // Total Pengeluaran pada Tanggal yang Dipilih
+  const totalPengeluaranTerpilih = useMemo(() => {
+    return (expenses || [])
+      .filter((exp) => isSameDate(exp.timestamp, selectedDate))
+      .reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+  }, [expenses, selectedDate]);
 
-  // Pembayaran Tunai Hari Ini (nominal dan jumlah transaksi)
-  const { totalTunaiHariIni, countTunaiHariIni } = useMemo(() => {
-    const tunaiTxs = todayTransactions.filter(
+  // 3. Total Pendapatan Bersih (Sudah dikurangi pengeluaran / biaya pada tanggal yang dipilih)
+  const totalPendapatanBersih = useMemo(() => {
+    const kotor = selectedTransactions.reduce((sum, tx) => sum + (tx.total || 0), 0);
+    return kotor - totalPengeluaranTerpilih;
+  }, [selectedTransactions, totalPengeluaranTerpilih]);
+
+  // Pembayaran Tunai pada Tanggal yang Dipilih
+  const { totalTunaiTerpilih, countTunaiTerpilih } = useMemo(() => {
+    const tunaiTxs = selectedTransactions.filter(
       (tx) => (tx.paymentMethod || 'TUNAI').toUpperCase() === 'TUNAI'
     );
     return {
-      totalTunaiHariIni: tunaiTxs.reduce((sum, tx) => sum + (tx.total || 0), 0),
-      countTunaiHariIni: tunaiTxs.length,
+      totalTunaiTerpilih: tunaiTxs.reduce((sum, tx) => sum + (tx.total || 0), 0),
+      countTunaiTerpilih: tunaiTxs.length,
     };
-  }, [todayTransactions]);
+  }, [selectedTransactions]);
 
-  // Pembayaran QRIS Hari Ini (nominal dan jumlah transaksi)
-  const { totalQrisHariIni, countQrisHariIni } = useMemo(() => {
-    const qrisTxs = todayTransactions.filter(
+  // Pembayaran QRIS pada Tanggal yang Dipilih
+  const { totalQrisTerpilih, countQrisTerpilih } = useMemo(() => {
+    const qrisTxs = selectedTransactions.filter(
       (tx) => (tx.paymentMethod || '').toUpperCase() === 'QRIS'
     );
     return {
-      totalQrisHariIni: qrisTxs.reduce((sum, tx) => sum + (tx.total || 0), 0),
-      countQrisHariIni: qrisTxs.length,
+      totalQrisTerpilih: qrisTxs.reduce((sum, tx) => sum + (tx.total || 0), 0),
+      countQrisTerpilih: qrisTxs.length,
     };
-  }, [todayTransactions]);
+  }, [selectedTransactions]);
 
-  // Total cup porsi terjual hari ini
-  const totalCupHariIni = useMemo(() => {
-    return todayTransactions.reduce((sum, tx) => {
+  // Total cup porsi terjual pada Tanggal yang Dipilih
+  const totalCupTerpilih = useMemo(() => {
+    return selectedTransactions.reduce((sum, tx) => {
       return (
         sum +
         (tx.items?.reduce((itemSum, item) => itemSum + (item.qty || 1), 0) || 0)
       );
     }, 0);
-  }, [todayTransactions]);
+  }, [selectedTransactions]);
 
   // 4. Produk Terlaris (Dihitung dari seluruh data transaksi yang tersimpan di Local Storage)
   const topSellingProducts = useMemo(() => {
@@ -369,7 +427,9 @@ export const DashboardPage = () => {
   const menuDistributionData = useMemo(() => {
     const targetTransactions =
       menuFilterPeriod === 'today'
-        ? todayTransactions.length > 0
+        ? selectedTransactions.length > 0
+          ? selectedTransactions
+          : todayTransactions.length > 0
           ? todayTransactions
           : transactions
         : transactions;
@@ -417,7 +477,7 @@ export const DashboardPage = () => {
           stroke: '#94a3b8',
         },
       ];
-  }, [menuFilterPeriod, todayTransactions, transactions]);
+  }, [menuFilterPeriod, selectedTransactions, todayTransactions, transactions]);
 
   // Total Cup di Donut Chart
   const donutTotalCups = useMemo(() => {
@@ -454,27 +514,58 @@ export const DashboardPage = () => {
         </div>
       </div>
 
+      {/* 7-Day Selector Bar (1 minggu ke belakang) */}
+      <div className="bg-white rounded-2xl p-2.5 sm:p-3.5 border border-slate-200/80 shadow-soft">
+        <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+          {past7Days.map((day) => {
+            const isSelected = selectedDate === day.dateStr;
+            return (
+              <button
+                key={day.dateStr}
+                type="button"
+                onClick={() => setSelectedDate(day.dateStr)}
+                className={`py-1.5 px-0.5 sm:py-2 sm:px-1 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer select-none text-center ${
+                  isSelected
+                    ? 'border border-puko-700/60 bg-puko-600 text-white'
+                    : 'border border-slate-200/80 bg-slate-50/80 hover:bg-slate-100 text-slate-600'
+                }`}
+              >
+                <span
+                  className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${
+                    isSelected ? 'text-puko-100 font-bold' : 'text-slate-400'
+                  }`}
+                >
+                  {day.dayName}
+                </span>
+                <span
+                  className={`text-xs sm:text-sm mt-0.5 ${
+                    isSelected ? 'text-white font-black' : 'text-slate-700 font-bold'
+                  }`}
+                >
+                  {day.dayNumber}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* 4 KPI Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* 1. Total Pendapatan Hari Ini */}
+        {/* 1. Total Pendapatan Bersih */}
         <StatCard
-          title="Total Pendapatan Hari Ini"
-          value={formatIDR(totalPendapatanHariIni)}
-          subtitle="Omzet bersih hari ini"
+          title="Total Pendapatan Bersih"
+          value={formatIDR(totalPendapatanBersih)}
+          subtitle={`${totalTransaksiTerpilih} transaksi`}
           icon={TrendingUp}
           color="black"
-          trend={
-            <span className="text-emerald-600 font-semibold flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Real-time dari LocalStorage
-            </span>
-          }
         />
 
         {/* 2. Pembayaran Tunai */}
         <StatCard
           title="Pembayaran Tunai"
-          value={formatIDR(totalTunaiHariIni)}
-          subtitle={`${countTunaiHariIni} transaksi`}
+          value={formatIDR(totalTunaiTerpilih)}
+          subtitle={`${countTunaiTerpilih} transaksi`}
           icon={Banknote}
           color="black"
         />
@@ -482,8 +573,8 @@ export const DashboardPage = () => {
         {/* 3. Pembayaran QRIS */}
         <StatCard
           title="Pembayaran QRIS"
-          value={formatIDR(totalQrisHariIni)}
-          subtitle={`${countQrisHariIni} transaksi`}
+          value={formatIDR(totalQrisTerpilih)}
+          subtitle={`${countQrisTerpilih} transaksi`}
           icon={QrCode}
           color="black"
         />
@@ -491,7 +582,7 @@ export const DashboardPage = () => {
         {/* 4. Total Cup Terjual */}
         <StatCard
           title="Total Cup Terjual"
-          value={totalCupHariIni}
+          value={totalCupTerpilih}
           icon={Coffee}
           color="black"
         />
