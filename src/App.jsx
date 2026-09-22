@@ -5,6 +5,7 @@ import { SettingsProvider } from './context/SettingsContext';
 import { ProductProvider } from './context/ProductContext';
 import { TransactionProvider } from './context/TransactionContext';
 import { CartProvider } from './context/CartContext';
+import { ExpenseProvider } from './context/ExpenseContext';
 import { AppRoutes } from './routes/AppRoutes';
 
 function App() {
@@ -14,9 +15,11 @@ function App() {
         <SettingsProvider>
           <ProductProvider>
             <TransactionProvider>
-              <CartProvider>
-                <AppRoutes />
-              </CartProvider>
+              <ExpenseProvider>
+                <CartProvider>
+                  <AppRoutes />
+                </CartProvider>
+              </ExpenseProvider>
             </TransactionProvider>
           </ProductProvider>
         </SettingsProvider>

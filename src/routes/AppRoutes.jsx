@@ -5,6 +5,7 @@ import { CashierPage } from '../pages/Cashier';
 import { DashboardPage } from '../pages/Dashboard';
 import { ProductsPage } from '../pages/Products';
 import { TransactionsPage } from '../pages/Transactions';
+import { ExpensesPage } from '../pages/Expenses';
 import { SettingsPage } from '../pages/Settings';
 import { LoginPage } from '../pages/Auth/Login';
 import { ProtectedRoute } from './ProtectedRoute';
@@ -31,6 +32,16 @@ export const AppRoutes = () => {
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'KASIR']}>
               <CashierPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Pengeluaran Toko: Accessible by both ADMIN and KASIR */}
+        <Route
+          path="/pengeluaran"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'KASIR']}>
+              <ExpensesPage />
             </ProtectedRoute>
           }
         />

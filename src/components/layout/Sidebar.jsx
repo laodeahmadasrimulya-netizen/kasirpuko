@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Store,
+  Wallet,
   Coffee,
   History,
   Settings,
@@ -19,6 +20,7 @@ import { useAuth } from '../../hooks/useAuth';
 const NAV_ITEMS = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMIN'] },
   { path: '/kasir', label: 'Kasir (POS)', icon: Store, badge: 'POS', roles: ['ADMIN', 'KASIR'] },
+  { path: '/pengeluaran', label: 'Pengeluaran', icon: Wallet, roles: ['ADMIN', 'KASIR'] },
   { path: '/riwayat', label: 'Riwayat Transaksi', icon: History, roles: ['ADMIN', 'KASIR'] },
   { path: '/pengaturan', label: 'Pengaturan', icon: Settings, roles: ['ADMIN'] },
 ];
