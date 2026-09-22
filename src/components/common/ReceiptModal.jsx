@@ -33,39 +33,19 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
 
   // Save as PDF action using html2pdf with exact thermal paper sizing & flat styling
   const handleSavePdf = async () => {
-    if (!receiptRef.current) return;
+    const element = receiptRef.current;
+    if (!element) return;
     playPrintReceiptSound();
     setIsExportingPdf(true);
 
-    let clone = null;
+    const prevScrollY = window.scrollY;
+    const prevScrollX = window.scrollX;
+
     try {
-      const original = receiptRef.current;
+      window.scrollTo(0, 0);
       const targetWidthMm = paperSize === '58mm' ? 58 : 80;
-      const renderPixelWidth = paperSize === '58mm' ? 340 : 460;
-
-      // Create an off-screen clone with flat receipt styling (no shadows, no rounded card border)
-      clone = original.cloneNode(true);
-      clone.id = 'receipt-pdf-clone';
-      clone.style.width = `${renderPixelWidth}px`;
-      clone.style.minWidth = `${renderPixelWidth}px`;
-      clone.style.maxWidth = `${renderPixelWidth}px`;
-      clone.style.margin = '0';
-      clone.style.padding = paperSize === '58mm' ? '18px 16px' : '24px 20px';
-      clone.style.borderRadius = '0';
-      clone.style.boxShadow = 'none';
-      clone.style.border = 'none';
-      clone.style.backgroundColor = '#ffffff';
-      clone.style.color = '#000000';
-      clone.style.position = 'fixed';
-      clone.style.left = '-9999px';
-      clone.style.top = '0';
-      clone.style.zIndex = '-9999';
-
-      document.body.appendChild(clone);
-
-      // Measure the rendered pixel dimensions
-      const renderedWidth = clone.offsetWidth || renderPixelWidth;
-      const renderedHeight = clone.offsetHeight || 500;
+      const renderedWidth = element.offsetWidth || (paperSize === '58mm' ? 260 : 340);
+      const renderedHeight = element.offsetHeight || 500;
 
       // Calculate exact proportional height in mm + 4mm margin
       const targetHeightMm = Math.ceil((renderedHeight / renderedWidth) * targetWidthMm) + 4;
@@ -79,10 +59,16 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
           useCORS: true,
           logging: false,
           backgroundColor: '#ffffff',
-          width: renderPixelWidth,
-          windowWidth: renderPixelWidth,
           scrollX: 0,
           scrollY: 0,
+          onclone: (clonedDoc) => {
+            const el = clonedDoc.getElementById('receipt-print-area');
+            if (el) {
+              el.style.boxShadow = 'none';
+              el.style.borderRadius = '0';
+              el.style.border = 'none';
+            }
+          },
         },
         jsPDF: {
           unit: 'mm',
@@ -91,14 +77,12 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
         },
       };
 
-      await html2pdf().set(opt).from(clone).save();
+      await html2pdf().set(opt).from(element).save();
     } catch (err) {
       console.error('Failed to generate PDF:', err);
       window.print();
     } finally {
-      if (clone && clone.parentNode) {
-        clone.parentNode.removeChild(clone);
-      }
+      window.scrollTo(prevScrollX, prevScrollY);
       setIsExportingPdf(false);
     }
   };

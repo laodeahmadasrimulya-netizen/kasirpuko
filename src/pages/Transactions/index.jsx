@@ -348,68 +348,60 @@ export const TransactionsPage = () => {
 
   // Download PDF using html2pdf.js with mobile (pas layar HP) or A4 layout
   const handleSavePdf = async () => {
-    if (!reportRef.current) return;
+    const element = reportRef.current;
+    if (!element) return;
     setIsExportingPdf(true);
 
-    let clone = null;
+    const prevScrollY = window.scrollY;
+    const prevScrollX = window.scrollX;
+
     try {
-      const original = reportRef.current;
-      const safeLabel = periodLabel.replace(/[^a-zA-Z0-9]/g, '_');
+      // Reset scroll position temporarily to prevent html2canvas blank page/offset issue
+      window.scrollTo(0, 0);
+      if (element.parentElement) {
+        element.parentElement.scrollLeft = 0;
+      }
+      const scrollableParent = element.closest('.overflow-y-auto');
+      const prevParentScrollTop = scrollableParent ? scrollableParent.scrollTop : 0;
+      if (scrollableParent) {
+        scrollableParent.scrollTop = 0;
+      }
+
       const isMobileFormat = reportFormat === 'mobile';
+      const safeLabel = periodLabel.replace(/[^a-zA-Z0-9]/g, '_');
       const filename = `Laporan_Transaksi_PUKO_${isMobileFormat ? 'Mobile_' : ''}${safeLabel}.pdf`;
 
-      // If mobile format: target width is 420px (~108mm, perfect for phone screens)
-      // If A4 format: target width is 794px (210mm A4 standard)
-      const targetWidthPx = isMobileFormat ? 420 : 794;
-      const targetWidthMm = isMobileFormat ? 108 : 210;
-
-      // Create an off-screen clone with exact printable styling
-      clone = original.cloneNode(true);
-      clone.id = 'report-pdf-clone';
-      clone.style.width = `${targetWidthPx}px`;
-      clone.style.minWidth = `${targetWidthPx}px`;
-      clone.style.maxWidth = `${targetWidthPx}px`;
-      clone.style.margin = '0';
-      clone.style.padding = isMobileFormat ? '14px 14px' : '24px 28px';
-      clone.style.borderRadius = '0';
-      clone.style.boxShadow = 'none';
-      clone.style.border = 'none';
-      clone.style.backgroundColor = '#ffffff';
-      clone.style.color = '#0f172a';
-      clone.style.position = 'fixed';
-      clone.style.left = '-9999px';
-      clone.style.top = '0';
-      clone.style.zIndex = '-9999';
-
-      // Avoid table rows being sliced across page breaks
-      const rows = clone.querySelectorAll('tr');
-      rows.forEach((row) => {
-        row.style.pageBreakInside = 'avoid';
-        row.style.breakInside = 'avoid';
-      });
-
-      document.body.appendChild(clone);
-
-      const renderedWidth = clone.offsetWidth || targetWidthPx;
-      const renderedHeight = clone.offsetHeight || 600;
+      // Measure the real rendered dimensions
+      const renderedWidth = element.offsetWidth || (isMobileFormat ? 420 : 750);
+      const renderedHeight = element.offsetHeight || 600;
 
       let opt;
       if (isMobileFormat) {
         // Continuous single-page height calibrated to 108mm width (+ 4mm bottom buffer)
+        const targetWidthMm = 108;
         const targetHeightMm = Math.ceil((renderedHeight / renderedWidth) * targetWidthMm) + 4;
+
         opt = {
           margin: [3, 2, 3, 2],
           filename: filename,
           image: { type: 'jpeg', quality: 0.98 },
           html2canvas: {
-            scale: 2.5,
+            scale: 2,
             useCORS: true,
             logging: false,
             backgroundColor: '#ffffff',
-            width: targetWidthPx,
-            windowWidth: targetWidthPx,
             scrollX: 0,
             scrollY: 0,
+            onclone: (clonedDoc) => {
+              const el = clonedDoc.getElementById('printable-report');
+              if (el) {
+                el.style.boxShadow = 'none';
+                el.style.borderRadius = '0';
+                if (el.parentElement) {
+                  el.parentElement.style.overflow = 'visible';
+                }
+              }
+            },
           },
           jsPDF: {
             unit: 'mm',
@@ -427,10 +419,18 @@ export const TransactionsPage = () => {
             useCORS: true,
             logging: false,
             backgroundColor: '#ffffff',
-            width: targetWidthPx,
-            windowWidth: targetWidthPx,
             scrollX: 0,
             scrollY: 0,
+            onclone: (clonedDoc) => {
+              const el = clonedDoc.getElementById('printable-report');
+              if (el) {
+                el.style.boxShadow = 'none';
+                el.style.borderRadius = '0';
+                if (el.parentElement) {
+                  el.parentElement.style.overflow = 'visible';
+                }
+              }
+            },
           },
           jsPDF: {
             unit: 'mm',
@@ -444,15 +444,17 @@ export const TransactionsPage = () => {
         };
       }
 
-      await html2pdf().set(opt).from(clone).save();
+      await html2pdf().set(opt).from(element).save();
+
+      if (scrollableParent) {
+        scrollableParent.scrollTop = prevParentScrollTop;
+      }
     } catch (err) {
       console.error('Failed to export PDF:', err);
       alert('Terjadi kesalahan saat generate PDF. Membuka dialog print browser...');
       window.print();
     } finally {
-      if (clone && clone.parentNode) {
-        clone.parentNode.removeChild(clone);
-      }
+      window.scrollTo(prevScrollX, prevScrollY);
       setIsExportingPdf(false);
     }
   };
