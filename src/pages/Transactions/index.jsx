@@ -346,6 +346,15 @@ export const TransactionsPage = () => {
     return 'Semua Waktu';
   }, [dateFilter, customStartDate, customEndDate]);
 
+  // Label for who printed the report: Admin if admin, cashier name if cashier
+  const printedBy = useMemo(() => {
+    if (isAdmin || user?.role === 'ADMIN') {
+      return 'Admin';
+    }
+    const name = user?.name || user?.username || settings?.cashierName || 'Kasir 01';
+    return name.toLowerCase().includes('kasir') ? name : `Kasir (${name})`;
+  }, [isAdmin, user, settings]);
+
   // Download PDF using html2pdf.js with mobile (pas layar HP) or A4 layout
   const handleSavePdf = async () => {
     const element = reportRef.current;
@@ -958,286 +967,385 @@ export const TransactionsPage = () => {
                   >
                     <div
                       style={{
-                        display: 'inline-block',
-                        backgroundColor: '#0f172a',
-                        color: '#ffffff',
-                        padding: '5px 12px',
-                        borderRadius: '6px',
-                        fontWeight: '800',
-                        fontSize: reportFormat === 'mobile' ? '10px' : '11px',
-                        letterSpacing: '0.5px',
-                        textTransform: 'uppercase',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        flexWrap: 'wrap',
+                        justifyContent: reportFormat === 'mobile' ? 'flex-start' : 'flex-end',
                       }}
                     >
-                      Laporan Penjualan & Keuangan
+                      <div
+                        style={{
+                          border: '1.5px solid #0f172a',
+                          backgroundColor: '#ffffff',
+                          color: '#0f172a',
+                          padding: '4px 8px',
+                          borderRadius: '3px',
+                          fontWeight: '800',
+                          fontSize: reportFormat === 'mobile' ? '9.5px' : '10.5px',
+                          letterSpacing: '0.5px',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        Laporan Penjualan & Keuangan
+                      </div>
+                      <div
+                        style={{
+                          border: '1.5px solid #0f172a',
+                          backgroundColor: '#f8fafc',
+                          color: '#0f172a',
+                          padding: '4px 8px',
+                          borderRadius: '3px',
+                          fontWeight: '900',
+                          fontSize: reportFormat === 'mobile' ? '9.5px' : '10.5px',
+                          letterSpacing: '0.5px',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {printedBy}
+                      </div>
                     </div>
                     <div
                       style={{
-                        display: reportFormat === 'mobile' ? 'flex' : 'block',
-                        justifyContent: 'space-between',
-                        marginTop: '4px',
-                        fontSize: '9.5px',
+                        marginTop: '5px',
+                        fontSize: reportFormat === 'mobile' ? '9px' : '9.5px',
                         color: '#475569',
+                        lineHeight: '1.5',
                       }}
                     >
-                      <span>
-                        <strong>Cetak:</strong> {formatDate(new Date())}
-                      </span>
-                      <span>
-                        Kasir: {settings?.cashierName || 'Kasir 01'}
-                      </span>
+                      <div>
+                        <strong>Tanggal Cetak:</strong> {formatDate(new Date())}
+                      </div>
+                      <div>
+                        <strong>Dicetak Oleh:</strong>{' '}
+                        <span style={{ fontWeight: '800', color: '#0f172a' }}>
+                          {printedBy}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Parameter Filter Bar */}
+              {/* Parameter Filter Bar (Ala Word, Clean & Hemat Tinta) */}
               <div
                 style={{
-                  backgroundColor: '#f8fafc',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '6px',
-                  padding: reportFormat === 'mobile' ? '7px 10px' : '10px 14px',
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #94a3b8',
+                  padding: reportFormat === 'mobile' ? '6px 8px' : '8px 12px',
                   marginBottom: reportFormat === 'mobile' ? '12px' : '16px',
                   display: 'flex',
                   flexWrap: 'wrap',
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   gap: '6px',
-                  fontSize: reportFormat === 'mobile' ? '9px' : '10.5px',
+                  fontSize: reportFormat === 'mobile' ? '9px' : '10px',
                 }}
               >
                 <div>
-                  <span style={{ color: '#64748b', fontWeight: '700' }}>PERIODE: </span>
+                  <span style={{ color: '#475569', fontWeight: '700' }}>PERIODE: </span>
                   <span style={{ color: '#0f172a', fontWeight: '800' }}>{periodLabel}</span>
                 </div>
                 <div>
-                  <span style={{ color: '#64748b', fontWeight: '700' }}>METODE: </span>
+                  <span style={{ color: '#475569', fontWeight: '700' }}>METODE: </span>
                   <span style={{ color: '#0f172a', fontWeight: '800' }}>
                     {selectedMethod === 'ALL' ? 'Semua' : selectedMethod}
                   </span>
                 </div>
                 <div>
-                  <span style={{ color: '#64748b', fontWeight: '700' }}>TOTAL: </span>
+                  <span style={{ color: '#475569', fontWeight: '700' }}>TOTAL: </span>
                   <span style={{ color: '#0f172a', fontWeight: '800' }}>
                     {filteredTransactions.length} Transaksi
                   </span>
                 </div>
               </div>
 
-              {/* 6 KPI Ringkasan Keuangan (Monokrom Hitam, Merah untuk Pengeluaran, Hijau untuk Pendapatan Bersih) */}
+              {/* Tabel Ringkasan Keuangan (Simpel & Rapi ala Tabel Word, Hemat Tinta, Angka 100% Utuh Tidak Terpotong) */}
               <div
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns:
-                    reportFormat === 'mobile' ? 'repeat(3, 1fr)' : 'repeat(6, 1fr)',
-                  gap: '6px',
                   marginBottom: reportFormat === 'mobile' ? '14px' : '20px',
+                  pageBreakInside: 'avoid',
                 }}
               >
-                {/* 1. Total Omzet */}
                 <div
                   style={{
-                    border: '1px solid #cbd5e1',
-                    borderRadius: '6px',
-                    padding: '6px 7px',
-                    backgroundColor: '#f8fafc',
+                    fontSize: reportFormat === 'mobile' ? '10px' : '11px',
+                    fontWeight: '800',
+                    color: '#0f172a',
+                    marginBottom: '6px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
                   }}
                 >
-                  <div
-                    style={{
-                      fontSize: '8px',
-                      color: '#475569',
-                      fontWeight: '800',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    Total Omzet
-                  </div>
-                  <div
-                    style={{
-                      fontSize: reportFormat === 'mobile' ? '11px' : '12px',
-                      fontWeight: '900',
-                      color: '#0f172a',
-                      marginTop: '2px',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {formatIDR(summary.totalOmzet)}
-                  </div>
+                  Ringkasan Keuangan Toko:
                 </div>
-
-                {/* 2. Tunai */}
-                <div
+                <table
                   style={{
-                    border: '1px solid #cbd5e1',
-                    borderRadius: '6px',
-                    padding: '6px 7px',
-                    backgroundColor: '#f8fafc',
+                    width: '100%',
+                    borderCollapse: 'collapse',
+                    border: '1.5px solid #334155',
+                    fontSize: reportFormat === 'mobile' ? '9.5px' : '10.5px',
+                    backgroundColor: '#ffffff',
+                    tableLayout: 'fixed',
+                    lineHeight: '1.5',
                   }}
                 >
-                  <div
-                    style={{
-                      fontSize: '8px',
-                      color: '#475569',
-                      fontWeight: '800',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    Tunai
-                  </div>
-                  <div
-                    style={{
-                      fontSize: reportFormat === 'mobile' ? '11px' : '12px',
-                      fontWeight: '900',
-                      color: '#0f172a',
-                      marginTop: '2px',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {formatIDR(summary.totalTunai)}
-                  </div>
-                </div>
-
-                {/* 3. QRIS */}
-                <div
-                  style={{
-                    border: '1px solid #cbd5e1',
-                    borderRadius: '6px',
-                    padding: '6px 7px',
-                    backgroundColor: '#f8fafc',
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: '8px',
-                      color: '#475569',
-                      fontWeight: '800',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    QRIS
-                  </div>
-                  <div
-                    style={{
-                      fontSize: reportFormat === 'mobile' ? '11px' : '12px',
-                      fontWeight: '900',
-                      color: '#0f172a',
-                      marginTop: '2px',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {formatIDR(summary.totalQris)}
-                  </div>
-                </div>
-
-                {/* 4. Total Cup */}
-                <div
-                  style={{
-                    border: '1px solid #cbd5e1',
-                    borderRadius: '6px',
-                    padding: '6px 7px',
-                    backgroundColor: '#f8fafc',
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: '8px',
-                      color: '#475569',
-                      fontWeight: '800',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    Total Cup
-                  </div>
-                  <div
-                    style={{
-                      fontSize: reportFormat === 'mobile' ? '11px' : '12px',
-                      fontWeight: '900',
-                      color: '#0f172a',
-                      marginTop: '2px',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {summary.totalCup} Cup
-                  </div>
-                </div>
-
-                {/* 5. Pengeluaran (WARNA MERAH AGAR KELIHATAN JELAS) */}
-                <div
-                  style={{
-                    border: '1.5px solid #ef4444',
-                    borderRadius: '6px',
-                    padding: '6px 7px',
-                    backgroundColor: '#fef2f2',
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: '8px',
-                      color: '#dc2626',
-                      fontWeight: '800',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    Pengeluaran
-                  </div>
-                  <div
-                    style={{
-                      fontSize: reportFormat === 'mobile' ? '11px' : '12px',
-                      fontWeight: '900',
-                      color: '#dc2626',
-                      marginTop: '2px',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {formatIDR(totalPengeluaran)}
-                  </div>
-                </div>
-
-                {/* 6. Pendapatan Bersih (WARNA HIJAU AGAR KELIHATAN JELAS) */}
-                <div
-                  style={{
-                    border: '1.5px solid #16a34a',
-                    borderRadius: '6px',
-                    padding: '6px 7px',
-                    backgroundColor: '#f0fdf4',
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: '8px',
-                      color: '#15803d',
-                      fontWeight: '800',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    Pendapatan Bersih
-                  </div>
-                  <div
-                    style={{
-                      fontSize: reportFormat === 'mobile' ? '11px' : '12px',
-                      fontWeight: '900',
-                      color: '#15803d',
-                      marginTop: '2px',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {formatIDR(totalPendapatanBersih)}
-                  </div>
-                </div>
+                  <thead>
+                    <tr
+                      style={{
+                        backgroundColor: '#f8fafc',
+                        borderBottom: '1.5px solid #334155',
+                      }}
+                    >
+                      <th
+                        style={{
+                          padding: reportFormat === 'mobile' ? '6px 4px' : '7px 8px',
+                          border: '1px solid #cbd5e1',
+                          textAlign: 'center',
+                          fontWeight: '800',
+                          color: '#0f172a',
+                          width: reportFormat === 'mobile' ? '26px' : '32px',
+                        }}
+                      >
+                        No
+                      </th>
+                      <th
+                        style={{
+                          padding: reportFormat === 'mobile' ? '6px 8px' : '7px 10px',
+                          border: '1px solid #cbd5e1',
+                          textAlign: 'left',
+                          fontWeight: '800',
+                          color: '#0f172a',
+                        }}
+                      >
+                        Uraian / Indikator Keuangan
+                      </th>
+                      <th
+                        style={{
+                          padding: reportFormat === 'mobile' ? '6px 8px' : '7px 10px',
+                          border: '1px solid #cbd5e1',
+                          textAlign: 'right',
+                          fontWeight: '800',
+                          color: '#0f172a',
+                          width: reportFormat === 'mobile' ? '140px' : '200px',
+                        }}
+                      >
+                        Jumlah / Nominal
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
+                      <td
+                        style={{
+                          padding: '6px 4px',
+                          border: '1px solid #cbd5e1',
+                          textAlign: 'center',
+                          color: '#64748b',
+                          fontWeight: '600',
+                        }}
+                      >
+                        1
+                      </td>
+                      <td
+                        style={{
+                          padding: reportFormat === 'mobile' ? '6px 8px' : '7px 10px',
+                          border: '1px solid #cbd5e1',
+                          fontWeight: '700',
+                          color: '#0f172a',
+                        }}
+                      >
+                        Total Omzet Penjualan (Kotor)
+                      </td>
+                      <td
+                        style={{
+                          padding: reportFormat === 'mobile' ? '6px 8px' : '7px 10px',
+                          border: '1px solid #cbd5e1',
+                          textAlign: 'right',
+                          fontWeight: '900',
+                          color: '#0f172a',
+                          fontSize: reportFormat === 'mobile' ? '10.5px' : '12px',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {formatIDR(summary.totalOmzet)}
+                      </td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
+                      <td
+                        style={{
+                          padding: '6px 4px',
+                          border: '1px solid #cbd5e1',
+                          textAlign: 'center',
+                          color: '#64748b',
+                          fontWeight: '600',
+                        }}
+                      >
+                        2
+                      </td>
+                      <td
+                        style={{
+                          padding: reportFormat === 'mobile' ? '6px 8px' : '7px 10px',
+                          border: '1px solid #cbd5e1',
+                          color: '#334155',
+                          fontWeight: '600',
+                        }}
+                      >
+                        - Pembayaran Tunai (Cash)
+                      </td>
+                      <td
+                        style={{
+                          padding: reportFormat === 'mobile' ? '6px 8px' : '7px 10px',
+                          border: '1px solid #cbd5e1',
+                          textAlign: 'right',
+                          fontWeight: '800',
+                          color: '#334155',
+                          fontSize: reportFormat === 'mobile' ? '10px' : '11.5px',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {formatIDR(summary.totalTunai)}
+                      </td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
+                      <td
+                        style={{
+                          padding: '6px 4px',
+                          border: '1px solid #cbd5e1',
+                          textAlign: 'center',
+                          color: '#64748b',
+                          fontWeight: '600',
+                        }}
+                      >
+                        3
+                      </td>
+                      <td
+                        style={{
+                          padding: reportFormat === 'mobile' ? '6px 8px' : '7px 10px',
+                          border: '1px solid #cbd5e1',
+                          color: '#334155',
+                          fontWeight: '600',
+                        }}
+                      >
+                        - Pembayaran Non-Tunai (QRIS)
+                      </td>
+                      <td
+                        style={{
+                          padding: reportFormat === 'mobile' ? '6px 8px' : '7px 10px',
+                          border: '1px solid #cbd5e1',
+                          textAlign: 'right',
+                          fontWeight: '800',
+                          color: '#334155',
+                          fontSize: reportFormat === 'mobile' ? '10px' : '11.5px',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {formatIDR(summary.totalQris)}
+                      </td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
+                      <td
+                        style={{
+                          padding: '6px 4px',
+                          border: '1px solid #cbd5e1',
+                          textAlign: 'center',
+                          color: '#64748b',
+                          fontWeight: '600',
+                        }}
+                      >
+                        4
+                      </td>
+                      <td
+                        style={{
+                          padding: reportFormat === 'mobile' ? '6px 8px' : '7px 10px',
+                          border: '1px solid #cbd5e1',
+                          color: '#334155',
+                          fontWeight: '600',
+                        }}
+                      >
+                        Total Cup Minuman Terjual
+                      </td>
+                      <td
+                        style={{
+                          padding: reportFormat === 'mobile' ? '6px 8px' : '7px 10px',
+                          border: '1px solid #cbd5e1',
+                          textAlign: 'right',
+                          fontWeight: '800',
+                          color: '#0f172a',
+                          fontSize: reportFormat === 'mobile' ? '10px' : '11.5px',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {summary.totalCup} Cup
+                      </td>
+                    </tr>
+                    <tr style={{ borderBottom: '1.5px solid #334155' }}>
+                      <td
+                        style={{
+                          padding: '6px 4px',
+                          border: '1px solid #cbd5e1',
+                          textAlign: 'center',
+                          color: '#dc2626',
+                          fontWeight: '700',
+                        }}
+                      >
+                        5
+                      </td>
+                      <td
+                        style={{
+                          padding: reportFormat === 'mobile' ? '6px 8px' : '7px 10px',
+                          border: '1px solid #cbd5e1',
+                          fontWeight: '700',
+                          color: '#dc2626',
+                        }}
+                      >
+                        Total Pengeluaran Toko (Biaya Operasional)
+                      </td>
+                      <td
+                        style={{
+                          padding: reportFormat === 'mobile' ? '6px 8px' : '7px 10px',
+                          border: '1px solid #cbd5e1',
+                          textAlign: 'right',
+                          fontWeight: '900',
+                          color: '#dc2626',
+                          fontSize: reportFormat === 'mobile' ? '10.5px' : '12px',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        - {formatIDR(totalPengeluaran)}
+                      </td>
+                    </tr>
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ backgroundColor: '#f0fdf4' }}>
+                      <td
+                        colSpan={2}
+                        style={{
+                          padding: reportFormat === 'mobile' ? '8px 8px' : '9px 10px',
+                          fontWeight: '900',
+                          color: '#15803d',
+                          fontSize: reportFormat === 'mobile' ? '10px' : '11.5px',
+                          border: '1px solid #cbd5e1',
+                        }}
+                      >
+                        PENDAPATAN BERSIH (LABA BERSIH):
+                      </td>
+                      <td
+                        style={{
+                          padding: reportFormat === 'mobile' ? '8px 8px' : '9px 10px',
+                          textAlign: 'right',
+                          fontWeight: '900',
+                          color: '#15803d',
+                          fontSize: reportFormat === 'mobile' ? '11px' : '13px',
+                          border: '1px solid #cbd5e1',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        = {formatIDR(totalPendapatanBersih)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
 
               {/* Tabel Lengkap Rincian Transaksi */}
@@ -1258,73 +1366,79 @@ export const TransactionsPage = () => {
                   style={{
                     width: '100%',
                     borderCollapse: 'collapse',
+                    border: '1px solid #334155',
                     fontSize: reportFormat === 'mobile' ? '9px' : '10px',
                     tableLayout: 'fixed',
+                    backgroundColor: '#ffffff',
                   }}
                 >
                   <thead>
                     <tr
                       style={{
-                        backgroundColor: '#f1f5f9',
-                        borderTop: '2px solid #0f172a',
-                        borderBottom: '2px solid #0f172a',
+                        backgroundColor: '#f8fafc',
+                        borderBottom: '1.5px solid #334155',
                         textAlign: 'left',
                         color: '#0f172a',
                       }}
                     >
                       <th
                         style={{
-                          padding: reportFormat === 'mobile' ? '5px 3px' : '8px 6px',
-                          width: reportFormat === 'mobile' ? '18px' : '28px',
+                          padding: reportFormat === 'mobile' ? '5px 3px' : '7px 6px',
+                          width: reportFormat === 'mobile' ? '20px' : '28px',
                           textAlign: 'center',
                           fontWeight: '800',
+                          border: '1px solid #cbd5e1',
                         }}
                       >
                         No
                       </th>
                       <th
                         style={{
-                          padding: reportFormat === 'mobile' ? '5px 3px' : '8px 6px',
-                          width: reportFormat === 'mobile' ? '70px' : '130px',
+                          padding: reportFormat === 'mobile' ? '5px 4px' : '7px 6px',
+                          width: reportFormat === 'mobile' ? '75px' : '120px',
                           fontWeight: '800',
+                          border: '1px solid #cbd5e1',
                         }}
                       >
                         No. Struk
                       </th>
                       {reportFormat === 'a4' && (
-                        <th style={{ padding: '8px 6px', width: '95px', fontWeight: '800' }}>
+                        <th style={{ padding: '7px 6px', width: '90px', fontWeight: '800', border: '1px solid #cbd5e1' }}>
                           Waktu
                         </th>
                       )}
                       {reportFormat === 'a4' && (
-                        <th style={{ padding: '8px 6px', width: '100px', fontWeight: '800' }}>
+                        <th style={{ padding: '7px 6px', width: '95px', fontWeight: '800', border: '1px solid #cbd5e1' }}>
                           Pelanggan
                         </th>
                       )}
                       <th
                         style={{
-                          padding: reportFormat === 'mobile' ? '5px 4px' : '8px 6px',
+                          padding: reportFormat === 'mobile' ? '5px 4px' : '7px 6px',
                           fontWeight: '800',
+                          border: '1px solid #cbd5e1',
                         }}
                       >
-                        {reportFormat === 'mobile' ? 'Pesanan & Pelanggan' : 'Detail Pesanan'}
+                        {reportFormat === 'mobile' ? 'Pesanan & Pelanggan' : 'Detail Menu Pesanan'}
                       </th>
                       <th
                         style={{
-                          padding: reportFormat === 'mobile' ? '5px 2px' : '8px 6px',
-                          width: reportFormat === 'mobile' ? '42px' : '65px',
+                          padding: reportFormat === 'mobile' ? '5px 2px' : '7px 6px',
+                          width: reportFormat === 'mobile' ? '46px' : '65px',
                           textAlign: 'center',
                           fontWeight: '800',
+                          border: '1px solid #cbd5e1',
                         }}
                       >
                         Metode
                       </th>
                       <th
                         style={{
-                          padding: reportFormat === 'mobile' ? '5px 3px' : '8px 6px',
-                          width: reportFormat === 'mobile' ? '68px' : '85px',
+                          padding: reportFormat === 'mobile' ? '5px 4px' : '7px 6px',
+                          width: reportFormat === 'mobile' ? '86px' : '105px',
                           textAlign: 'right',
                           fontWeight: '800',
+                          border: '1px solid #cbd5e1',
                         }}
                       >
                         Total (Rp)
@@ -1336,9 +1450,8 @@ export const TransactionsPage = () => {
                       <tr
                         key={tx.id}
                         style={{
-                          borderBottom: '1px solid #e2e8f0',
-                          backgroundColor:
-                            idx % 2 === 0 ? '#ffffff' : '#f8fafc',
+                          borderBottom: '1px solid #cbd5e1',
+                          backgroundColor: '#ffffff',
                         }}
                       >
                         <td
@@ -1347,18 +1460,19 @@ export const TransactionsPage = () => {
                             textAlign: 'center',
                             color: '#64748b',
                             fontWeight: '600',
+                            border: '1px solid #cbd5e1',
                           }}
                         >
                           {idx + 1}
                         </td>
                         <td
                           style={{
-                            padding: reportFormat === 'mobile' ? '5px 3px' : '6px',
+                            padding: reportFormat === 'mobile' ? '5px 4px' : '6px',
                             fontFamily: 'monospace',
                             fontWeight: '700',
                             color: '#0f172a',
-                            fontSize: reportFormat === 'mobile' ? '8px' : '10px',
-                            wordBreak: 'break-all',
+                            fontSize: reportFormat === 'mobile' ? '8px' : '9.5px',
+                            border: '1px solid #cbd5e1',
                           }}
                         >
                           {tx.id}
@@ -1369,12 +1483,12 @@ export const TransactionsPage = () => {
                           )}
                         </td>
                         {reportFormat === 'a4' && (
-                          <td style={{ padding: '6px', color: '#475569' }}>
+                          <td style={{ padding: '6px', color: '#475569', border: '1px solid #cbd5e1' }}>
                             {formatDate(tx.timestamp)}
                           </td>
                         )}
                         {reportFormat === 'a4' && (
-                          <td style={{ padding: '6px', color: '#0f172a' }}>
+                          <td style={{ padding: '6px', color: '#0f172a', border: '1px solid #cbd5e1' }}>
                             <div style={{ fontWeight: '700' }}>
                               {tx.customerName || 'Pelanggan Umum'}
                             </div>
@@ -1387,6 +1501,7 @@ export const TransactionsPage = () => {
                           style={{
                             padding: reportFormat === 'mobile' ? '5px 4px' : '6px',
                             color: '#334155',
+                            border: '1px solid #cbd5e1',
                           }}
                         >
                           {reportFormat === 'mobile' && tx.customerName && (
@@ -1402,7 +1517,7 @@ export const TransactionsPage = () => {
                             </div>
                           )}
                           {tx.items?.map((item, i) => (
-                            <div key={i} style={{ lineHeight: '1.25' }}>
+                            <div key={i} style={{ lineHeight: '1.3' }}>
                               <span style={{ fontWeight: '700', color: '#0f172a' }}>
                                 {item.qty}x
                               </span>{' '}
@@ -1426,16 +1541,14 @@ export const TransactionsPage = () => {
                           style={{
                             padding: reportFormat === 'mobile' ? '5px 2px' : '6px',
                             textAlign: 'center',
+                            border: '1px solid #cbd5e1',
                           }}
                         >
                           <span
                             style={{
                               padding: '1px 4px',
-                              borderRadius: '4px',
-                              fontSize: reportFormat === 'mobile' ? '7.5px' : '9px',
+                              fontSize: reportFormat === 'mobile' ? '8px' : '9px',
                               fontWeight: '700',
-                              backgroundColor: '#f1f5f9',
-                              border: '1px solid #cbd5e1',
                               color: '#0f172a',
                             }}
                           >
@@ -1444,12 +1557,14 @@ export const TransactionsPage = () => {
                         </td>
                         <td
                           style={{
-                            padding: reportFormat === 'mobile' ? '5px 3px' : '6px',
+                            padding: reportFormat === 'mobile' ? '5px 4px' : '6px',
                             textAlign: 'right',
                             fontWeight: '800',
                             color: '#0f172a',
-                            fontSize: reportFormat === 'mobile' ? '9px' : '10px',
+                            fontSize: reportFormat === 'mobile' ? '9.5px' : '10.5px',
+                            border: '1px solid #cbd5e1',
                             whiteSpace: 'nowrap',
+                            lineHeight: '1.4',
                           }}
                         >
                           {formatIDR(tx.total)}
@@ -1460,30 +1575,31 @@ export const TransactionsPage = () => {
                   <tfoot>
                     <tr
                       style={{
-                        borderTop: '2px solid #0f172a',
-                        borderBottom: '2px solid #0f172a',
+                        borderTop: '1.5px solid #334155',
                         backgroundColor: '#f8fafc',
                       }}
                     >
                       <td
                         colSpan={reportFormat === 'mobile' ? 4 : 6}
                         style={{
-                          padding: reportFormat === 'mobile' ? '6px 4px' : '8px 6px',
+                          padding: reportFormat === 'mobile' ? '6px 5px' : '8px 6px',
                           fontWeight: '800',
                           textAlign: 'right',
                           fontSize: reportFormat === 'mobile' ? '9.5px' : '11px',
                           color: '#0f172a',
+                          border: '1px solid #cbd5e1',
                         }}
                       >
                         TOTAL OMZET:
                       </td>
                       <td
                         style={{
-                          padding: reportFormat === 'mobile' ? '6px 4px' : '8px 6px',
+                          padding: reportFormat === 'mobile' ? '6px 5px' : '8px 6px',
                           fontWeight: '900',
                           textAlign: 'right',
-                          fontSize: reportFormat === 'mobile' ? '10px' : '12px',
+                          fontSize: reportFormat === 'mobile' ? '10.5px' : '12px',
                           color: '#0f172a',
+                          border: '1px solid #cbd5e1',
                           whiteSpace: 'nowrap',
                         }}
                       >
@@ -1518,16 +1634,17 @@ export const TransactionsPage = () => {
                     style={{
                       width: '100%',
                       borderCollapse: 'collapse',
+                      border: '1px solid #334155',
                       fontSize: reportFormat === 'mobile' ? '9px' : '10px',
                       tableLayout: 'fixed',
+                      backgroundColor: '#ffffff',
                     }}
                   >
                     <thead>
                       <tr
                         style={{
-                          backgroundColor: '#f1f5f9',
-                          borderTop: '2px solid #0f172a',
-                          borderBottom: '2px solid #0f172a',
+                          backgroundColor: '#f8fafc',
+                          borderBottom: '1.5px solid #334155',
                           textAlign: 'left',
                           color: '#0f172a',
                         }}
@@ -1535,9 +1652,10 @@ export const TransactionsPage = () => {
                         <th
                           style={{
                             padding: reportFormat === 'mobile' ? '5px 3px' : '7px 6px',
-                            width: reportFormat === 'mobile' ? '18px' : '28px',
+                            width: reportFormat === 'mobile' ? '20px' : '28px',
                             textAlign: 'center',
                             fontWeight: '800',
+                            border: '1px solid #cbd5e1',
                           }}
                         >
                           No
@@ -1545,8 +1663,9 @@ export const TransactionsPage = () => {
                         <th
                           style={{
                             padding: reportFormat === 'mobile' ? '5px 3px' : '7px 6px',
-                            width: reportFormat === 'mobile' ? '65px' : '130px',
+                            width: reportFormat === 'mobile' ? '65px' : '120px',
                             fontWeight: '800',
+                            border: '1px solid #cbd5e1',
                           }}
                         >
                           Waktu
@@ -1555,21 +1674,23 @@ export const TransactionsPage = () => {
                           style={{
                             padding: reportFormat === 'mobile' ? '5px 4px' : '7px 6px',
                             fontWeight: '800',
+                            border: '1px solid #cbd5e1',
                           }}
                         >
                           Keterangan / Keperluan
                         </th>
                         {reportFormat === 'a4' && (
-                          <th style={{ padding: '7px 6px', width: '90px', fontWeight: '800' }}>
+                          <th style={{ padding: '7px 6px', width: '90px', fontWeight: '800', border: '1px solid #cbd5e1' }}>
                             Dicatat Oleh
                           </th>
                         )}
                         <th
                           style={{
-                            padding: reportFormat === 'mobile' ? '5px 3px' : '7px 6px',
-                            width: reportFormat === 'mobile' ? '72px' : '100px',
+                            padding: reportFormat === 'mobile' ? '5px 4px' : '7px 6px',
+                            width: reportFormat === 'mobile' ? '86px' : '105px',
                             textAlign: 'right',
                             fontWeight: '800',
+                            border: '1px solid #cbd5e1',
                           }}
                         >
                           Nominal (Rp)
@@ -1581,9 +1702,8 @@ export const TransactionsPage = () => {
                         <tr
                           key={exp.id || idx}
                           style={{
-                            borderBottom: '1px solid #e2e8f0',
-                            backgroundColor:
-                              idx % 2 === 0 ? '#ffffff' : '#f8fafc',
+                            borderBottom: '1px solid #cbd5e1',
+                            backgroundColor: '#ffffff',
                           }}
                         >
                           <td
@@ -1592,6 +1712,7 @@ export const TransactionsPage = () => {
                               textAlign: 'center',
                               color: '#64748b',
                               fontWeight: '600',
+                              border: '1px solid #cbd5e1',
                             }}
                           >
                             {idx + 1}
@@ -1601,6 +1722,7 @@ export const TransactionsPage = () => {
                               padding: reportFormat === 'mobile' ? '5px 3px' : '6px',
                               color: '#475569',
                               fontSize: reportFormat === 'mobile' ? '8px' : '9.5px',
+                              border: '1px solid #cbd5e1',
                             }}
                           >
                             {reportFormat === 'mobile'
@@ -1612,6 +1734,7 @@ export const TransactionsPage = () => {
                               padding: reportFormat === 'mobile' ? '5px 4px' : '6px',
                               color: '#0f172a',
                               fontWeight: '600',
+                              border: '1px solid #cbd5e1',
                             }}
                           >
                             <div>{exp.category || exp.keterangan || 'Pengeluaran Operasional'}</div>
@@ -1628,18 +1751,20 @@ export const TransactionsPage = () => {
                             )}
                           </td>
                           {reportFormat === 'a4' && (
-                            <td style={{ padding: '6px', color: '#475569' }}>
+                            <td style={{ padding: '6px', color: '#475569', border: '1px solid #cbd5e1' }}>
                               {exp.user || 'Kasir'}
                             </td>
                           )}
                           <td
                             style={{
-                              padding: reportFormat === 'mobile' ? '5px 3px' : '6px',
+                              padding: reportFormat === 'mobile' ? '5px 4px' : '6px',
                               textAlign: 'right',
                               fontWeight: '800',
                               color: '#dc2626',
-                              fontSize: reportFormat === 'mobile' ? '9px' : '10px',
+                              fontSize: reportFormat === 'mobile' ? '9.5px' : '10.5px',
+                              border: '1px solid #cbd5e1',
                               whiteSpace: 'nowrap',
+                              lineHeight: '1.4',
                             }}
                           >
                             - {formatIDR(exp.amount)}
@@ -1650,30 +1775,31 @@ export const TransactionsPage = () => {
                     <tfoot>
                       <tr
                         style={{
-                          borderTop: '2px solid #0f172a',
-                          borderBottom: '2px solid #0f172a',
+                          borderTop: '1.5px solid #334155',
                           backgroundColor: '#f8fafc',
                         }}
                       >
                         <td
                           colSpan={reportFormat === 'mobile' ? 3 : 4}
                           style={{
-                            padding: reportFormat === 'mobile' ? '6px 4px' : '7px 6px',
+                            padding: reportFormat === 'mobile' ? '6px 5px' : '7px 6px',
                             fontWeight: '800',
                             textAlign: 'right',
                             fontSize: reportFormat === 'mobile' ? '9.5px' : '11px',
                             color: '#0f172a',
+                            border: '1px solid #cbd5e1',
                           }}
                         >
                           TOTAL PENGELUARAN:
                         </td>
                         <td
                           style={{
-                            padding: reportFormat === 'mobile' ? '6px 4px' : '7px 6px',
+                            padding: reportFormat === 'mobile' ? '6px 5px' : '7px 6px',
                             fontWeight: '900',
                             textAlign: 'right',
-                            fontSize: reportFormat === 'mobile' ? '10px' : '12px',
+                            fontSize: reportFormat === 'mobile' ? '10.5px' : '12px',
                             color: '#dc2626',
+                            border: '1px solid #cbd5e1',
                             whiteSpace: 'nowrap',
                           }}
                         >
@@ -1685,13 +1811,9 @@ export const TransactionsPage = () => {
                 </div>
               )}
 
-              {/* Kotak Rekapitulasi Keuangan Bersih (Struktur Jelas & Rapi) */}
+              {/* Kotak Rekapitulasi Keuangan Bersih (Struktur Jelas & Rapi ala Tabel Word) */}
               <div
                 style={{
-                  backgroundColor: '#ffffff',
-                  border: '2px solid #0f172a',
-                  borderRadius: '6px',
-                  padding: reportFormat === 'mobile' ? '10px 12px' : '12px 16px',
                   marginBottom: reportFormat === 'mobile' ? '14px' : '20px',
                   pageBreakInside: 'avoid',
                 }}
@@ -1708,89 +1830,85 @@ export const TransactionsPage = () => {
                 >
                   REKAPITULASI KEUANGAN BERSIH:
                 </div>
-                <div
+                <table
                   style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '5px 0',
-                    borderBottom: '1px solid #e2e8f0',
+                    width: '100%',
+                    borderCollapse: 'collapse',
+                    border: '1.5px solid #0f172a',
+                    backgroundColor: '#ffffff',
+                    fontSize: reportFormat === 'mobile' ? '9.5px' : '10.5px',
                   }}
                 >
-                  <span
-                    style={{
-                      fontSize: reportFormat === 'mobile' ? '9.5px' : '11px',
-                      color: '#0f172a',
-                      fontWeight: '700',
-                    }}
-                  >
-                    1. Total Omzet Penjualan (Kotor)
-                  </span>
-                  <span
-                    style={{
-                      fontSize: reportFormat === 'mobile' ? '10.5px' : '12px',
-                      color: '#0f172a',
-                      fontWeight: '800',
-                    }}
-                  >
-                    {formatIDR(summary.totalOmzet)}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '5px 0',
-                    borderBottom: '1px solid #e2e8f0',
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: reportFormat === 'mobile' ? '9.5px' : '11px',
-                      color: '#dc2626',
-                      fontWeight: '700',
-                    }}
-                  >
-                    2. Total Pengeluaran / Biaya
-                  </span>
-                  <span
-                    style={{
-                      fontSize: reportFormat === 'mobile' ? '10.5px' : '12px',
-                      color: '#dc2626',
-                      fontWeight: '800',
-                    }}
-                  >
-                    - {formatIDR(totalPengeluaran)}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '6px 0 2px 0',
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: reportFormat === 'mobile' ? '10.5px' : '12px',
-                      color: '#15803d',
-                      fontWeight: '900',
-                    }}
-                  >
-                    3. TOTAL PENDAPATAN BERSIH
-                  </span>
-                  <span
-                    style={{
-                      fontSize: reportFormat === 'mobile' ? '12px' : '14px',
-                      color: '#15803d',
-                      fontWeight: '900',
-                    }}
-                  >
-                    = {formatIDR(totalPendapatanBersih)}
-                  </span>
-                </div>
+                  <tbody>
+                    <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
+                      <td
+                        style={{
+                          padding: '7px 10px',
+                          color: '#0f172a',
+                          fontWeight: '700',
+                        }}
+                      >
+                        1. Total Omzet Penjualan (Kotor)
+                      </td>
+                      <td
+                        style={{
+                          padding: '7px 10px',
+                          color: '#0f172a',
+                          fontWeight: '800',
+                          textAlign: 'right',
+                          fontSize: reportFormat === 'mobile' ? '10.5px' : '12px',
+                        }}
+                      >
+                        {formatIDR(summary.totalOmzet)}
+                      </td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
+                      <td
+                        style={{
+                          padding: '7px 10px',
+                          color: '#dc2626',
+                          fontWeight: '700',
+                        }}
+                      >
+                        2. Total Pengeluaran / Biaya Operasional
+                      </td>
+                      <td
+                        style={{
+                          padding: '7px 10px',
+                          color: '#dc2626',
+                          fontWeight: '800',
+                          textAlign: 'right',
+                          fontSize: reportFormat === 'mobile' ? '10.5px' : '12px',
+                        }}
+                      >
+                        - {formatIDR(totalPengeluaran)}
+                      </td>
+                    </tr>
+                    <tr style={{ backgroundColor: '#f0fdf4' }}>
+                      <td
+                        style={{
+                          padding: '8px 10px',
+                          color: '#15803d',
+                          fontWeight: '900',
+                          fontSize: reportFormat === 'mobile' ? '10.5px' : '12px',
+                        }}
+                      >
+                        3. TOTAL PENDAPATAN BERSIH
+                      </td>
+                      <td
+                        style={{
+                          padding: '8px 10px',
+                          color: '#15803d',
+                          fontWeight: '900',
+                          textAlign: 'right',
+                          fontSize: reportFormat === 'mobile' ? '12px' : '14px',
+                        }}
+                      >
+                        = {formatIDR(totalPendapatanBersih)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
 
               {/* Footer Keterangan Sistem */}
