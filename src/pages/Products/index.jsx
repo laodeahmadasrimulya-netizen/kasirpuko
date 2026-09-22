@@ -93,43 +93,27 @@ export const ProductsPage = () => {
 
   return (
     <div className="space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl lg:text-2xl font-extrabold text-slate-800 tracking-tight">
-              Manajemen Menu PUKO 🥑
-            </h2>
-            <span className="text-xs bg-puko-100 text-puko-800 font-bold px-2.5 py-0.5 rounded-full">
-              {totalCount} Menu
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Kelola varian alpukat kocok, topping, dan minuman tambahan dengan upload foto dan kategori.
-          </p>
-        </div>
+      {/* Top Actions */}
+      <div className="flex items-center justify-end gap-2.5">
+        <Button
+          variant="outline"
+          size="md"
+          onClick={resetProducts}
+          icon={RotateCcw}
+          title="Kembalikan data menu ke demo awal"
+        >
+          Reset Default
+        </Button>
 
-        <div className="flex items-center gap-2.5">
-          <Button
-            variant="outline"
-            size="md"
-            onClick={resetProducts}
-            icon={RotateCcw}
-            title="Kembalikan data menu ke demo awal"
-          >
-            Reset Default
-          </Button>
-
-          <Button
-            variant="primary"
-            size="md"
-            onClick={handleOpenAdd}
-            icon={Plus}
-            className="shadow-md shadow-puko-700/20 font-bold"
-          >
-            Tambah Menu Baru
-          </Button>
-        </div>
+        <Button
+          variant="primary"
+          size="md"
+          onClick={handleOpenAdd}
+          icon={Plus}
+          className="shadow-md shadow-puko-700/20 font-bold"
+        >
+          Tambah Menu Baru
+        </Button>
       </div>
 
       {/* Category Overview Cards */}
