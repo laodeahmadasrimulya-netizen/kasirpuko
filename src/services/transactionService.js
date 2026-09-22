@@ -392,7 +392,7 @@ export const transactionService = {
 
     const todayRevenue = todayTransactions.reduce((acc, curr) => acc + (curr.total || 0), 0);
     const todayOrdersCount = todayTransactions.length;
-    
+
     // Count items sold today
     const itemsCount = todayTransactions.reduce((acc, curr) => {
       return acc + curr.items.reduce((sum, item) => sum + (item.qty || 1), 0);
