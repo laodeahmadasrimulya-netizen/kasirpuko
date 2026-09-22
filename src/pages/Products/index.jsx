@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   Plus,
-  RotateCcw,
   Search,
   Edit2,
   Trash2,
@@ -35,7 +34,6 @@ export const ProductsPage = () => {
     addProduct,
     editProduct,
     deleteProduct,
-    resetProducts,
   } = useProducts();
 
   // State for Form Modal (Tambah & Edit)
@@ -94,17 +92,7 @@ export const ProductsPage = () => {
   return (
     <div className="space-y-6">
       {/* Top Actions */}
-      <div className="flex items-center justify-end gap-2.5">
-        <Button
-          variant="outline"
-          size="md"
-          onClick={resetProducts}
-          icon={RotateCcw}
-          title="Kembalikan data menu ke demo awal"
-        >
-          Reset Default
-        </Button>
-
+      <div className="flex items-center justify-end">
         <Button
           variant="primary"
           size="md"
