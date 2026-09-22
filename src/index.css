@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-100 text-slate-900 min-h-screen;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slideUp {
+  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Custom sleek scrollbar for POS item catalogs */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Disable Recharts focus outlines and tap highlights on click */
+.recharts-wrapper,
+.recharts-wrapper *:focus,
+.recharts-surface,
+.recharts-surface:focus,
+.recharts-bar-rectangle,
+.recharts-bar-rectangles,
+.recharts-bar-rectangle:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+/* Print Styles for 58mm and 80mm Thermal Receipts */
+@media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+
+  body {
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #receipt-print-area,
+  #receipt-print-area *,
+  #printable-report,
+  #printable-report * {
+    visibility: visible !important;
+  }
+
+  #receipt-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    margin: 0 auto !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  #receipt-print-area.thermal-58mm {
+    width: 58mm !important;
+    max-width: 58mm !important;
+    padding: 2mm 3mm !important;
+    font-size: 10.5px !important;
+  }
+
+  #receipt-print-area.thermal-80mm {
+    width: 80mm !important;
+    max-width: 80mm !important;
+    padding: 4mm 5mm !important;
+    font-size: 12px !important;
+  }
+
+  #printable-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 10mm 12mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+}
