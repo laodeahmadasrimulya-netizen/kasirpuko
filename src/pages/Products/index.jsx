@@ -91,14 +91,15 @@ export const ProductsPage = () => {
 
   return (
     <div className="space-y-6">
-      {/* Top Actions */}
-      <div className="flex items-center justify-end">
+      {/* Top Actions: Tombol Memanjang */}
+      <div>
         <Button
           variant="primary"
           size="md"
+          fullWidth
           onClick={handleOpenAdd}
           icon={Plus}
-          className="shadow-md shadow-puko-700/20 font-bold"
+          className="w-full shadow-md shadow-puko-700/20 font-bold py-3 text-sm rounded-2xl cursor-pointer flex items-center justify-center gap-2"
         >
           Tambah Menu Baru
         </Button>
