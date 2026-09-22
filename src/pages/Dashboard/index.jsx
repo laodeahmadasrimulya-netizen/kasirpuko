@@ -39,6 +39,7 @@ import { Badge } from '../../components/common/Badge';
 import { formatIDR, formatNumber } from '../../utils/currency';
 import { formatDate, isToday } from '../../utils/date';
 import { handleImageError } from '../../utils/imageFallback';
+import { BannerCarousel } from '../../components/dashboard/BannerCarousel';
 
 // Custom Minimal Tooltip for 1-Week Daily Bar Chart (Hanya nominal, sejajar di atas grafik)
 const CustomWeeklyBarTooltip = ({ active, payload, metricMode = 'omzet' }) => {
@@ -486,33 +487,8 @@ export const DashboardPage = () => {
 
   return (
     <div className="space-y-6">
-      {/* Top Welcome Banner */}
-      <div className="bg-gradient-to-r from-puko-900 via-puko-800 to-emerald-800 text-white p-6 lg:p-8 rounded-3xl shadow-soft relative overflow-hidden">
-        <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-10 pointer-events-none flex items-center justify-end pr-6">
-          <Coffee className="w-64 h-64 text-white" />
-        </div>
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <h2 className="text-2xl lg:text-3xl font-extrabold tracking-tight">
-              Dashboard Penjualan PUKO 🥑
-            </h2>
-            <p className="text-emerald-100/80 text-xs lg:text-sm max-w-xl">
-              Pantau laporan omzet harian 1 minggu terakhir, total transaksi hari ini, dan produk paling laris secara real-time.
-            </p>
-          </div>
-
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={() => navigate('/kasir')}
-            icon={Store}
-            className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold border-none shadow-lg shadow-emerald-950/20"
-          >
-            Buka Kasir Sekarang
-          </Button>
-        </div>
-      </div>
+      {/* 3-Slide Brand Banner Carousel (Menu, Logo, Booth) */}
+      <BannerCarousel />
 
       {/* 7-Day Selector Bar (1 minggu ke belakang) */}
       <div className="bg-white rounded-2xl p-2.5 sm:p-3.5 border border-slate-200/80 shadow-soft">
