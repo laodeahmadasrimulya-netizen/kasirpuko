@@ -17,7 +17,6 @@ import {
   Eye,
   EyeOff,
   KeyRound,
-  ShieldCheck,
   AlertCircle,
   User,
   Coffee,
@@ -204,9 +203,9 @@ export const SettingsPage = () => {
           username: userFormData.username,
           pin: userFormData.pin,
           phone: userFormData.phone,
-          role: userFormData.role,
+          role: editingUser.role || 'KASIR',
         });
-        setUserSuccessMessage(`Akun kasir "${userFormData.name}" berhasil diperbarui!`);
+        setUserSuccessMessage(`Akun "${userFormData.name}" berhasil diperbarui!`);
       } else {
         // Add new user
         addUser({
@@ -214,7 +213,7 @@ export const SettingsPage = () => {
           username: userFormData.username,
           pin: userFormData.pin,
           phone: userFormData.phone,
-          role: userFormData.role,
+          role: 'KASIR',
         });
         setUserSuccessMessage(`Kasir baru "${userFormData.name}" berhasil ditambahkan!`);
       }
@@ -353,10 +352,10 @@ export const SettingsPage = () => {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider">
-                  <th className="py-2.5 px-3 rounded-l-lg">Staf / Kasir</th>
-                  <th className="py-2.5 px-3">Username Login</th>
-                  <th className="py-2.5 px-3">PIN / Sandi</th>
-                  <th className="py-2.5 px-3">Peran (Role)</th>
+                  <th className="py-2.5 px-3 rounded-l-lg">Nama</th>
+                  <th className="py-2.5 px-3">Username</th>
+                  <th className="py-2.5 px-3">Password</th>
+                  <th className="py-2.5 px-3">Peran</th>
                   <th className="py-2.5 px-3 text-right rounded-r-lg">Aksi</th>
                 </tr>
               </thead>
@@ -401,7 +400,7 @@ export const SettingsPage = () => {
                           <button
                             type="button"
                             onClick={() => handleTogglePinVisibility(u.id)}
-                            title={isPinShown ? 'Sembunyikan PIN' : 'Lihat PIN'}
+                            title={isPinShown ? 'Sembunyikan Password' : 'Lihat Password'}
                             className="p-1 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
                           >
                             {isPinShown ? (
@@ -687,11 +686,17 @@ export const SettingsPage = () => {
         </div>
       )}
 
-      {/* --- MODAL TAMBAH / EDIT KASIR --- */}
+      {/* --- MODAL TAMBAH / EDIT KASIR & OWNER --- */}
       <Modal
         isOpen={isUserModalOpen}
         onClose={handleCloseUserModal}
-        title={editingUser ? `Edit Akun Kasir: ${editingUser.name}` : 'Tambah Akun Kasir Baru'}
+        title={
+          editingUser
+            ? editingUser.role === 'ADMIN'
+              ? `Edit Akun Owner: ${editingUser.name}`
+              : `Edit Akun Kasir: ${editingUser.name}`
+            : 'Tambah Kasir Baru'
+        }
         maxWidth="max-w-md"
       >
         <form onSubmit={handleSaveUser} className="space-y-4">
@@ -704,22 +709,21 @@ export const SettingsPage = () => {
 
           <div>
             <Input
-              label="Nama Kasir / Staf"
-              placeholder="Contoh: Kasir 02 (Siti Rahma)"
+              label="Nama"
+              placeholder="Contoh: Siti Rahma"
               value={userFormData.name}
               onChange={(e) =>
                 setUserFormData((prev) => ({ ...prev, name: e.target.value }))
               }
               icon={User}
               required
-              helperText="Nama ini akan tampil di dashboard, riwayat & cetakan struk transaksi."
             />
           </div>
 
           <div>
             <Input
-              label="Username Login"
-              placeholder="Contoh: kasir2 atau siti"
+              label="Username"
+              placeholder="Contoh: siti"
               value={userFormData.username}
               onChange={(e) =>
                 setUserFormData((prev) => ({
@@ -729,13 +733,12 @@ export const SettingsPage = () => {
               }
               icon={Users}
               required
-              helperText="Hanya huruf/angka tanpa spasi. Digunakan saat kasir masuk ke sistem."
             />
           </div>
 
           <div>
             <Input
-              label="No. WhatsApp / Telepon (Untuk Login & Lupa Password)"
+              label="No. Telepon"
               placeholder="Contoh: 081234567890"
               value={userFormData.phone}
               onChange={(e) =>
@@ -745,13 +748,12 @@ export const SettingsPage = () => {
                 }))
               }
               icon={Phone}
-              helperText="Opsional. Dapat digunakan untuk login dan pemulihan jika lupa password."
             />
           </div>
 
           <div className="space-y-1.5">
             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
-              PIN / Sandi Login
+              Password
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -763,7 +765,7 @@ export const SettingsPage = () => {
                 onChange={(e) =>
                   setUserFormData((prev) => ({ ...prev, pin: e.target.value }))
                 }
-                placeholder="Contoh: 1234 atau 0000"
+                placeholder="Contoh: 1234"
                 required
                 className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl pl-10 pr-10 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 font-mono tracking-wider"
               />
@@ -777,48 +779,6 @@ export const SettingsPage = () => {
                 ) : (
                   <Eye className="w-4 h-4" />
                 )}
-              </button>
-            </div>
-            <p className="text-xs text-slate-400">
-              PIN atau kata sandi kasir untuk membuka sistem kasir.
-            </p>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
-              Hak Akses / Peran
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setUserFormData((prev) => ({ ...prev, role: 'KASIR' }))}
-                className={`p-3 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
-                  userFormData.role === 'KASIR'
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-500/20'
-                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <span className="text-xl">🥑</span>
-                <div>
-                  <p className="text-xs font-bold">Kasir Outlet</p>
-                  <p className="text-[10px] text-slate-500">POS & Riwayat</p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setUserFormData((prev) => ({ ...prev, role: 'ADMIN' }))}
-                className={`p-3 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
-                  userFormData.role === 'ADMIN'
-                    ? 'border-amber-500 bg-amber-50 text-amber-900 ring-2 ring-amber-500/20'
-                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0" />
-                <div>
-                  <p className="text-xs font-bold">Admin / Owner</p>
-                  <p className="text-[10px] text-slate-500">Akses Penuh</p>
-                </div>
               </button>
             </div>
           </div>

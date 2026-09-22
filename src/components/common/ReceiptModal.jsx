@@ -142,8 +142,18 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
           >
             {/* Header Struk */}
             <div className="text-center pb-2">
-              <div className="w-12 h-12 mx-auto mb-2 rounded-full overflow-hidden border border-slate-300">
-                <img src="/logo.png" alt="PUKO Logo" className="w-full h-full object-cover" />
+              <div
+                className="receipt-logo mx-auto mb-2 flex items-center justify-center transition-all"
+                style={{
+                  width: paperSize === '58mm' ? '88px' : '110px',
+                  height: paperSize === '58mm' ? '88px' : '110px',
+                }}
+              >
+                <img
+                  src="/logo.png"
+                  alt="PUKO Logo"
+                  className="w-full h-full object-contain"
+                />
               </div>
               <h2 className="text-xl font-black tracking-widest text-slate-950 font-sans uppercase">
                 {settings?.storeName || 'PUKO'}

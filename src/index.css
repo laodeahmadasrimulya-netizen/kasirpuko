@@ -105,6 +105,29 @@
     font-size: 12px !important;
   }
 
+  #receipt-print-area .receipt-logo {
+    margin: 0 auto 2mm auto !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  #receipt-print-area.thermal-58mm .receipt-logo {
+    width: 24mm !important;
+    height: 24mm !important;
+  }
+
+  #receipt-print-area.thermal-80mm .receipt-logo {
+    width: 32mm !important;
+    height: 32mm !important;
+  }
+
+  #receipt-print-area .receipt-logo img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+  }
+
   #printable-report {
     position: absolute;
     left: 0;
