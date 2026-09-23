@@ -283,9 +283,9 @@ export const ExpensesPage = () => {
                 </h4>
               </div>
 
-              {/* Right side: Nominal ukuran pas (- 20.000) tanpa Rp dan warna slate-700 */}
+              {/* Right side: Nominal pengeluaran (- 20.000) dengan warna merah */}
               <div className="text-right shrink-0">
-                <p className="text-sm sm:text-base font-bold text-slate-700 tracking-tight">
+                <p className="text-sm sm:text-base font-bold text-rose-600 tracking-tight">
                   - {formatNumber(expense.amount)}
                 </p>
               </div>

@@ -40,23 +40,9 @@ import { formatIDR, formatNumber } from '../../utils/currency';
 import { formatDate, isToday } from '../../utils/date';
 import { handleImageError } from '../../utils/imageFallback';
 import { BannerCarousel } from '../../components/dashboard/BannerCarousel';
+import { IngredientStockWidget } from '../../components/dashboard/IngredientStockWidget';
 
-// Custom Minimal Tooltip for 1-Week Daily Bar Chart (Hanya nominal, sejajar di atas grafik)
-const CustomWeeklyBarTooltip = ({ active, payload, metricMode = 'omzet' }) => {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload;
-    const val = metricMode === 'cup' ? data.cup : data.omzet;
-    // Jika hari tidak ada omset (0), jangan tampilkan apa-apa
-    if (!val || val <= 0) return null;
 
-    return (
-      <div className="bg-slate-700 text-white font-extrabold text-[11px] sm:text-xs px-2.5 py-1 rounded-lg -translate-x-1/2 whitespace-nowrap select-none pointer-events-none border border-slate-600/70 shadow-none">
-        {metricMode === 'cup' ? `${data.cup} Cup` : formatNumber(data.omzet)}
-      </div>
-    );
-  }
-  return null;
-};
 
 /**
  * Color mapper for menu items to give each avocado / topping variant
@@ -190,7 +176,36 @@ export const DashboardPage = () => {
   const { settings } = useSettings();
   const { expenses } = useExpenses();
 
-  const [metricMode, setMetricMode] = useState('omzet'); // 'omzet' or 'cup'
+  // State info hari terpilih saat diagram batang diklik
+  const [selectedChartDay, setSelectedChartDay] = useState(null);
+
+  // Handler klik batang diagram / hari grafik
+  const handleBarClick = (entry) => {
+    if (!entry) {
+      setSelectedChartDay(null);
+      return;
+    }
+    const hasTransactions =
+      (entry.pemasukan || 0) > 0 ||
+      (entry.pengeluaran || 0) > 0 ||
+      (entry.transaksi || 0) > 0;
+
+    if (hasTransactions) {
+      setSelectedChartDay(entry);
+    } else {
+      // Jika hari belum ada transaksi / hari esok, sembunyikan floating info
+      setSelectedChartDay(null);
+    }
+  };
+
+  const handleChartClick = (state) => {
+    if (state && state.activePayload && state.activePayload.length) {
+      const clickedItem = state.activePayload[0].payload;
+      handleBarClick(clickedItem);
+    } else {
+      setSelectedChartDay(null);
+    }
+  };
 
   // Generate past 7 days ending today (1 minggu ke belakang)
   const past7Days = useMemo(() => {
@@ -293,12 +308,17 @@ export const DashboardPage = () => {
     }, 0);
   }, [selectedTransactions]);
 
-  // 4. Produk Terlaris (Dihitung dari seluruh data transaksi yang tersimpan di Local Storage)
+  // 4. Produk Terlaris (Dihitung dari SELURUH data transaksi dari awal penggunaan sampai seterusnya)
   const topSellingProducts = useMemo(() => {
     const salesMap = {};
     transactions.forEach((tx) => {
       tx.items?.forEach((item) => {
         const key = item.nama || item.name;
+        if (!key) return;
+        const cat = (item.category || item.kategori || '').toLowerCase();
+        // Hanya hitung produk minuman utama (bukan topping extra)
+        if (cat.includes('topping') || key.toLowerCase().startsWith('extra ')) return;
+
         if (!salesMap[key]) {
           salesMap[key] = {
             name: key,
@@ -308,9 +328,9 @@ export const DashboardPage = () => {
             category: item.category || item.kategori,
           };
         }
-        salesMap[key].qty += item.qty || 1;
+        salesMap[key].qty += Number(item.qty) || 1;
         salesMap[key].revenue +=
-          item.subtotal || (item.harga || item.price) * (item.qty || 1);
+          Number(item.subtotal) || (Number(item.harga) || Number(item.price) || 0) * (Number(item.qty) || 1);
       });
     });
 
@@ -369,12 +389,15 @@ export const DashboardPage = () => {
         })}`,
         isToday: dateStr === todayDateStr,
         omzet: 0,
+        pemasukan: 0,
+        pengeluaran: 0,
+        bersih: 0,
         transaksi: 0,
         cup: 0,
       });
     }
 
-    // Akumulasi data transaksi tersimpan ke masing-masing hari
+    // Akumulasi data transaksi tersimpan ke masing-masing hari (Pemasukan)
     transactions.forEach((tx) => {
       if (!tx.timestamp) return;
       const txDate = new Date(tx.timestamp);
@@ -385,7 +408,8 @@ export const DashboardPage = () => {
 
       const targetDay = days.find((d) => d.dateKey === txDateStr);
       if (targetDay) {
-        targetDay.omzet += tx.total || 0;
+        targetDay.pemasukan = (targetDay.pemasukan || 0) + (tx.total || 0);
+        targetDay.omzet = targetDay.pemasukan;
         targetDay.transaksi += 1;
         const totalItems =
           tx.items?.reduce((sum, item) => sum + (item.qty || 1), 0) || 0;
@@ -393,8 +417,30 @@ export const DashboardPage = () => {
       }
     });
 
+    // Akumulasi data pengeluaran tersimpan ke masing-masing hari (Pengeluaran)
+    if (Array.isArray(expenses)) {
+      expenses.forEach((exp) => {
+        if (!exp.timestamp) return;
+        const expDate = new Date(exp.timestamp);
+        const year = expDate.getFullYear();
+        const month = String(expDate.getMonth() + 1).padStart(2, '0');
+        const dayNum = String(expDate.getDate()).padStart(2, '0');
+        const expDateStr = `${year}-${month}-${dayNum}`;
+
+        const targetDay = days.find((d) => d.dateKey === expDateStr);
+        if (targetDay) {
+          targetDay.pengeluaran = (targetDay.pengeluaran || 0) + (Number(exp.amount) || 0);
+        }
+      });
+    }
+
+    // Hitung pendapatan bersih per hari
+    days.forEach((day) => {
+      day.bersih = (day.pemasukan || 0) - (day.pengeluaran || 0);
+    });
+
     return days;
-  }, [transactions]);
+  }, [transactions, expenses]);
 
   // Statistik ringkas 1 minggu (Omzet & Cup)
   const weeklyTotalRevenue = useMemo(() => {
@@ -490,6 +536,9 @@ export const DashboardPage = () => {
       {/* 3-Slide Brand Banner Carousel (Menu, Logo, Booth) */}
       <BannerCarousel />
 
+      {/* STOK BAHAN BAKU UTAMA (Alpukat, Susu UHT, SKM) */}
+      <IngredientStockWidget />
+
       {/* 7-Day Selector Bar (1 minggu ke belakang) */}
       <div className="bg-white rounded-2xl p-2.5 sm:p-3.5 border border-slate-200/80 shadow-soft">
         <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
@@ -569,47 +618,61 @@ export const DashboardPage = () => {
         {/* Grafik Batang 1 Minggu (2 Cols) */}
         <div className="lg:col-span-2 space-y-4">
           <Card padding={false} className="p-5 overflow-hidden">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-              <div>
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5 text-slate-900 shrink-0" />
-                  <h3 className="font-extrabold text-slate-900 text-base">
-                    Grafik Penjualan Mingguan
-                  </h3>
-                </div>
-              </div>
-
-              {/* Mode Toggle: Omzet (Rp) vs Volume Cup */}
-              <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-bold self-start sm:self-auto">
-                <button
-                  type="button"
-                  onClick={() => setMetricMode('omzet')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${metricMode === 'omzet'
-                      ? 'bg-puko-600 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                >
-                  Omzet (Rp)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMetricMode('cup')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${metricMode === 'cup'
-                      ? 'bg-puko-600 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                >
-                  Jumlah Cup
-                </button>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-slate-900 shrink-0" />
+                <h3 className="font-extrabold text-slate-900 text-base">
+                  Grafik Penjualan Mingguan
+                </h3>
               </div>
             </div>
 
-            {/* Recharts BarChart Container */}
-            <div className="h-72 w-full">
+            {/* Recharts BarChart Container (Fokus Grafik Harga) */}
+            <div className="h-72 w-full relative">
+              {/* Floating Info Card: Mengambang & Stay di TENGAH atas grafik */}
+              {selectedChartDay &&
+                ((selectedChartDay.pemasukan || 0) > 0 ||
+                  (selectedChartDay.pengeluaran || 0) > 0 ||
+                  (selectedChartDay.transaksi || 0) > 0) && (
+                  <div className="absolute top-1.5 left-1/2 -translate-x-1/2 z-30 pointer-events-auto animate-in fade-in zoom-in-95 duration-150">
+                    <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/90 px-3.5 py-2.5 text-xs min-w-[170px] select-none">
+                      <div className="text-[11px] font-bold text-slate-500 mb-1.5 pb-1 border-b border-slate-100 flex items-center justify-between gap-3">
+                        <span>{selectedChartDay.fullDayName || selectedChartDay.day}</span>
+                        {selectedChartDay.isToday && (
+                          <span className="text-[10px] px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded font-bold">
+                            Hari Ini
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-slate-500 font-medium">Pemasukan:</span>
+                          <span className="font-extrabold text-slate-900">
+                            {formatIDR(selectedChartDay.pemasukan || selectedChartDay.omzet || 0)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-slate-500 font-medium">Pengeluaran:</span>
+                          <span className="font-extrabold text-rose-600">
+                            {formatIDR(selectedChartDay.pengeluaran || 0)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-100">
+                          <span className="text-slate-500 font-medium">Bersih:</span>
+                          <span className="font-extrabold text-emerald-600">
+                            {formatIDR(selectedChartDay.bersih || 0)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={weeklyDailyBarData}
                   margin={{ top: 35, right: 12, left: 12, bottom: 0 }}
+                  onClick={handleChartClick}
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -624,24 +687,31 @@ export const DashboardPage = () => {
                     axisLine={{ stroke: '#e2e8f0' }}
                   />
                   <YAxis hide />
-                  <Tooltip
-                    position={{ y: 6 }}
-                    cursor={false}
-                    content={<CustomWeeklyBarTooltip metricMode={metricMode} />}
-                  />
                   <Bar
-                    dataKey={metricMode === 'omzet' ? 'omzet' : 'cup'}
+                    dataKey="omzet"
                     radius={[8, 8, 0, 0]}
                     maxBarSize={48}
+                    onClick={handleBarClick}
                     style={{ outline: 'none', cursor: 'pointer' }}
                   >
-                    {weeklyDailyBarData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill="#52b788"
-                        style={{ outline: 'none', cursor: 'pointer' }}
-                      />
-                    ))}
+                    {weeklyDailyBarData.map((entry, index) => {
+                      const hasTx =
+                        (entry.pemasukan || 0) > 0 ||
+                        (entry.pengeluaran || 0) > 0 ||
+                        (entry.transaksi || 0) > 0;
+                      const isSelected = selectedChartDay?.dateKey === entry.dateKey && hasTx;
+                      return (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={isSelected ? '#2d6a4f' : '#52b788'}
+                          onClick={(e) => {
+                            e?.stopPropagation?.();
+                            handleBarClick(entry);
+                          }}
+                          style={{ outline: 'none', cursor: 'pointer' }}
+                        />
+                      );
+                    })}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -651,10 +721,10 @@ export const DashboardPage = () => {
             <div className="mt-5 pt-4 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                  {metricMode === 'cup' ? 'Total Cup Terjual (1 Minggu)' : 'Total Omzet 1 Minggu'}
+                  Total Omzet 1 Minggu
                 </span>
                 <span className="text-sm font-extrabold text-slate-900 mt-0.5 block">
-                  {metricMode === 'cup' ? `${weeklyTotalCups} Cup` : formatIDR(weeklyTotalRevenue)}
+                  {formatIDR(weeklyTotalRevenue)}
                 </span>
               </div>
 
@@ -663,7 +733,7 @@ export const DashboardPage = () => {
                   Rata-rata Penjualan / Hari
                 </span>
                 <span className="text-sm font-extrabold text-puko-800 mt-0.5 block">
-                  {metricMode === 'cup' ? `${weeklyAverageCups} Cup / Hari` : formatIDR(weeklyAverageRevenue)}
+                  {formatIDR(weeklyAverageRevenue)}
                 </span>
               </div>
 
@@ -672,9 +742,7 @@ export const DashboardPage = () => {
                   Penjualan Tertinggi
                 </span>
                 <span className="text-sm font-extrabold text-slate-900 mt-0.5 block truncate">
-                  {metricMode === 'cup'
-                    ? `${peakDayCup?.cup || 0} Cup`
-                    : formatIDR(peakDay?.omzet || 0)}
+                  {formatIDR(peakDay?.omzet || 0)}
                 </span>
               </div>
             </div>
@@ -858,6 +926,13 @@ export const DashboardPage = () => {
                             }`}
                             style={{ width: `${percentage}%` }}
                           />
+                        </div>
+
+                        {/* Menampilkan jumlah cup di bawah garis */}
+                        <div className="mt-1.5">
+                          <span className="text-xs text-slate-500 font-semibold">
+                            {Number(item.qty).toLocaleString('id-ID')} Cup
+                          </span>
                         </div>
                       </div>
                     </div>

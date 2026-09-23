@@ -5,7 +5,7 @@ import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../hooks/useAuth';
 
 const NAV_ITEMS = [
-  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMIN'] },
+  { path: '/dashboard', label: 'Beranda', icon: LayoutDashboard, roles: ['ADMIN'] },
   { path: '/kasir', label: 'Kasir', icon: Store, roles: ['ADMIN', 'KASIR'] },
   { path: '/pengeluaran', label: 'Pengeluaran', icon: Wallet, roles: ['ADMIN', 'KASIR'] },
   { path: '/riwayat', label: 'Riwayat', icon: History, roles: ['ADMIN', 'KASIR'] },

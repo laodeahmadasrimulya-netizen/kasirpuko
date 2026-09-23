@@ -17,7 +17,7 @@ export const BannerCarousel = () => {
           src="/banners/banner_combined.jpg"
           alt="PUKO Alpukat Kocok Banner"
           draggable={false}
-          className="relative z-10 w-full h-auto max-h-[320px] object-cover sm:object-contain rounded-2xl sm:rounded-3xl shadow-xs"
+          className="relative z-10 w-full h-auto block rounded-2xl sm:rounded-3xl shadow-xs"
         />
       </div>
     </div>

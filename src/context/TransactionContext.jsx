@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { transactionService } from '../services/transactionService';
 import { playSuccessSound } from '../utils/sound';
+import { useIngredients } from './IngredientContext';
 
 const TransactionContext = createContext(null);
 
 export const TransactionProvider = ({ children }) => {
+  const { deductForOrder } = useIngredients();
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState({
     todayRevenue: 0,
@@ -43,6 +45,11 @@ export const TransactionProvider = ({ children }) => {
       const savedTx = await transactionService.create(txData);
       setTransactions((prev) => [savedTx, ...prev]);
       
+      // Deduct raw ingredients stock automatically
+      if (txData?.items && Array.isArray(txData.items)) {
+        deductForOrder(txData.items);
+      }
+
       // Play success chime
       playSuccessSound();
 
