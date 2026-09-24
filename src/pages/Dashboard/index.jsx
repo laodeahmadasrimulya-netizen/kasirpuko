@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp,
@@ -10,12 +10,55 @@ import {
   Sparkles,
   CheckCircle2,
   Calendar,
+  CalendarRange,
+  ChevronLeft,
+  ChevronRight,
   BarChart3,
   PieChart as PieIcon,
   Crown,
   Flame,
   Award,
 } from 'lucide-react';
+
+const INDO_MONTHS = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+];
+const INDO_MONTHS_SHORT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+  'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+];
+const INDO_DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+const INDO_DAYS_SHORT = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+
+const formatIndonesianDateLong = (dateStr) => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const y = Number(parts[0]);
+  const m = Number(parts[1]);
+  const d = Number(parts[2]);
+  const dateObj = new Date(y, m - 1, d);
+  return `${INDO_DAYS[dateObj.getDay()]}, ${d} ${INDO_MONTHS[m - 1]} ${y}`;
+};
+
+const formatIndonesianMonthYear = (monthStr) => {
+  if (!monthStr) return '';
+  const parts = monthStr.split('-');
+  if (parts.length !== 2) return monthStr;
+  const y = Number(parts[0]);
+  const m = Number(parts[1]);
+  return `${INDO_MONTHS[m - 1]} ${y}`;
+};
+
+const formatIndonesianMonthShortYear = (monthStr) => {
+  if (!monthStr) return '';
+  const parts = monthStr.split('-');
+  if (parts.length !== 2) return monthStr;
+  const y = Number(parts[0]);
+  const m = Number(parts[1]);
+  return `${INDO_MONTHS_SHORT[m - 1]} ${y}`;
+};
 import {
   ResponsiveContainer,
   BarChart,
@@ -207,29 +250,8 @@ export const DashboardPage = () => {
     }
   };
 
-  // Generate past 7 days ending today (1 minggu ke belakang)
-  const past7Days = useMemo(() => {
-    const days = [];
-    const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
-    const now = new Date();
-
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(now.getDate() - i);
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      const dateStr = `${year}-${month}-${day}`;
-
-      days.push({
-        dateStr,
-        dayName: DAY_NAMES[d.getDay()], // e.g. "Jum", "Sab"
-        dayNumber: d.getDate(), // e.g. 17, 18
-        isToday: i === 0,
-      });
-    }
-    return days;
-  }, []);
+  // Mode filter: 'harian' (Daily) atau 'bulanan' (Monthly)
+  const [filterMode, setFilterMode] = useState('harian');
 
   const todayDateStr = useMemo(() => {
     const now = new Date();
@@ -239,7 +261,15 @@ export const DashboardPage = () => {
     return `${year}-${month}-${day}`;
   }, []);
 
+  const currentMonthStr = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+  }, []);
+
   const [selectedDate, setSelectedDate] = useState(todayDateStr);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
 
   const isSameDate = (isoString, targetDateStr) => {
     if (!isoString || !targetDateStr) return false;
@@ -250,27 +280,99 @@ export const DashboardPage = () => {
     return `${year}-${month}-${day}` === targetDateStr;
   };
 
-  // 1. Filter Transaksi pada Tanggal yang Dipilih
+  const isSameMonth = (isoString, targetMonthStr) => {
+    if (!isoString || !targetMonthStr) return false;
+    const d = new Date(isoString);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}` === targetMonthStr;
+  };
+
+  const harianScrollRef = useRef(null);
+
+  // Generate 30 hari ke belakang berakhir di hari ini (urutan: hari terlama -> hari ini di paling kanan)
+  const past30Days = useMemo(() => {
+    const days = [];
+    const now = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+
+      days.push({
+        dateStr,
+        dayName: INDO_DAYS_SHORT[d.getDay()],
+        dayNumber: d.getDate(),
+        isToday: i === 0,
+      });
+    }
+    return days;
+  }, []);
+
+  // Saat mode Harian aktif, otomatis geser scroll ke paling kanan (Hari Ini)
+  useEffect(() => {
+    if (filterMode === 'harian' && harianScrollRef.current) {
+      harianScrollRef.current.scrollLeft = harianScrollRef.current.scrollWidth;
+    }
+  }, [filterMode]);
+
+  // Navigasi Bulan (Sebelumnya & Berikutnya)
+  const handlePrevMonth = () => {
+    const parts = selectedMonth.split('-');
+    const y = Number(parts[0]);
+    const m = Number(parts[1]);
+    const prev = new Date(y, m - 2, 1);
+    const py = prev.getFullYear();
+    const pm = String(prev.getMonth() + 1).padStart(2, '0');
+    setSelectedMonth(`${py}-${pm}`);
+  };
+
+  const handleNextMonth = () => {
+    if (selectedMonth >= currentMonthStr) return;
+    const parts = selectedMonth.split('-');
+    const y = Number(parts[0]);
+    const m = Number(parts[1]);
+    const next = new Date(y, m, 1);
+    const ny = next.getFullYear();
+    const nm = String(next.getMonth() + 1).padStart(2, '0');
+    const nextStr = `${ny}-${nm}`;
+    if (nextStr <= currentMonthStr) {
+      setSelectedMonth(nextStr);
+    }
+  };
+
+  // 1. Filter Transaksi pada Tanggal atau Bulan yang Dipilih
   const selectedTransactions = useMemo(() => {
+    if (filterMode === 'bulanan') {
+      return transactions.filter((tx) => isSameMonth(tx.timestamp, selectedMonth));
+    }
     return transactions.filter((tx) => isSameDate(tx.timestamp, selectedDate));
-  }, [transactions, selectedDate]);
+  }, [transactions, filterMode, selectedDate, selectedMonth]);
 
   // Transaksi Hari Ini
   const todayTransactions = useMemo(() => {
     return transactions.filter((tx) => isSameDate(tx.timestamp, todayDateStr));
   }, [transactions, todayDateStr]);
 
-  // 2. Total Transaksi Terpilih (Keseluruhan transaksi: QRIS + Tunai)
+  // 2. Total Transaksi Terpilih
   const totalTransaksiTerpilih = selectedTransactions.length;
 
-  // Total Pengeluaran pada Tanggal yang Dipilih
+  // Total Pengeluaran pada Tanggal atau Bulan yang Dipilih
   const totalPengeluaranTerpilih = useMemo(() => {
+    if (filterMode === 'bulanan') {
+      return (expenses || [])
+        .filter((exp) => isSameMonth(exp.timestamp, selectedMonth))
+        .reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+    }
     return (expenses || [])
       .filter((exp) => isSameDate(exp.timestamp, selectedDate))
       .reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
-  }, [expenses, selectedDate]);
+  }, [expenses, filterMode, selectedDate, selectedMonth]);
 
-  // 3. Total Pendapatan Bersih (Sudah dikurangi pengeluaran / biaya pada tanggal yang dipilih)
+  // 3. Total Pendapatan Bersih (Sudah dikurangi pengeluaran / biaya pada tanggal/bulan yang dipilih)
   const totalPendapatanBersih = useMemo(() => {
     const kotor = selectedTransactions.reduce((sum, tx) => sum + (tx.total || 0), 0);
     return kotor - totalPengeluaranTerpilih;
@@ -539,40 +641,149 @@ export const DashboardPage = () => {
       {/* STOK BAHAN BAKU UTAMA (Alpukat, Susu UHT, SKM) */}
       <IngredientStockWidget />
 
-      {/* 7-Day Selector Bar (1 minggu ke belakang) */}
-      <div className="bg-white rounded-2xl p-2.5 sm:p-3.5 border border-slate-200/80 shadow-soft">
-        <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
-          {past7Days.map((day) => {
-            const isSelected = selectedDate === day.dateStr;
-            return (
-              <button
-                key={day.dateStr}
-                type="button"
-                onClick={() => setSelectedDate(day.dateStr)}
-                className={`py-1.5 px-0.5 sm:py-2 sm:px-1 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer select-none text-center ${
-                  isSelected
-                    ? 'border border-puko-700/60 bg-puko-600 text-white'
-                    : 'border border-slate-200/80 bg-slate-50/80 hover:bg-slate-100 text-slate-600'
-                }`}
-              >
-                <span
-                  className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${
-                    isSelected ? 'text-puko-100 font-bold' : 'text-slate-400'
-                  }`}
-                >
-                  {day.dayName}
-                </span>
-                <span
-                  className={`text-xs sm:text-sm mt-0.5 ${
-                    isSelected ? 'text-white font-black' : 'text-slate-700 font-bold'
-                  }`}
-                >
-                  {day.dayNumber}
-                </span>
-              </button>
-            );
-          })}
+      {/* Selector Bar: Pilihan Harian & Bulanan */}
+      <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/80 shadow-soft space-y-3">
+        {/* Row 1: Segmented Control (Harian & Bulanan) */}
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200/60 self-start">
+          <button
+            type="button"
+            onClick={() => setFilterMode('harian')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer select-none ${
+              filterMode === 'harian'
+                ? 'bg-puko-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Harian</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterMode('bulanan')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer select-none ${
+              filterMode === 'bulanan'
+                ? 'bg-puko-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <CalendarRange className="w-3.5 h-3.5" />
+            <span>Bulanan</span>
+          </button>
         </div>
+
+        {/* Row 2: Tampilan Harian (Scrollable seperti kereta, hari ini di kanan berbalut hijau) */}
+        {filterMode === 'harian' && (
+          <div className="animate-fadeIn">
+            <div
+              ref={harianScrollRef}
+              className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1.5 pt-0.5 px-0.5 scroll-smooth"
+              style={{ scrollbarWidth: 'thin' }}
+            >
+              {past30Days.map((day) => {
+                const isSelected = selectedDate === day.dateStr;
+                return (
+                  <button
+                    key={day.dateStr}
+                    type="button"
+                    onClick={() => setSelectedDate(day.dateStr)}
+                    className={`min-w-[56px] sm:min-w-[64px] py-2 px-1 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer select-none shrink-0 text-center ${
+                      isSelected
+                        ? 'border-2 border-puko-700 bg-puko-600 text-white shadow-sm font-black scale-[1.02]'
+                        : day.isToday
+                        ? 'border-2 border-puko-600 bg-puko-50/90 text-puko-800 font-extrabold hover:bg-puko-100 shadow-2xs'
+                        : 'border border-slate-200/80 bg-slate-50/80 hover:bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    <span
+                      className={`text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider ${
+                        isSelected
+                          ? 'text-puko-100'
+                          : day.isToday
+                          ? 'text-puko-700 font-black'
+                          : 'text-slate-400'
+                      }`}
+                    >
+                      {day.dayName}
+                    </span>
+                    <span
+                      className={`text-xs sm:text-sm mt-0.5 ${
+                        isSelected
+                          ? 'text-white font-black'
+                          : day.isToday
+                          ? 'text-puko-900 font-black'
+                          : 'text-slate-700 font-bold'
+                      }`}
+                    >
+                      {day.dayNumber}
+                    </span>
+                    {day.isToday && (
+                      <span
+                        className={`text-[8px] px-1 py-0.2 rounded font-extrabold mt-0.5 ${
+                          isSelected ? 'bg-white/20 text-white' : 'bg-puko-600 text-white'
+                        }`}
+                      >
+                        Hari Ini
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Row 2: Tampilan Bulanan (< Sep 2026 >) */}
+        {filterMode === 'bulanan' && (
+          <div className="animate-fadeIn">
+            <div className="flex items-center justify-between gap-2 bg-slate-50/90 p-2 sm:p-2.5 rounded-xl border border-slate-200/70">
+              <button
+                type="button"
+                onClick={handlePrevMonth}
+                className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-puko-600 transition-colors shadow-2xs cursor-pointer flex items-center gap-1 text-xs font-bold"
+                title="Pilih bulan sebelumnya"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">Bulan Sebelumnya</span>
+              </button>
+
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200/90 text-xs sm:text-sm font-extrabold text-slate-800 shadow-2xs">
+                <CalendarRange className="w-3.5 h-3.5 text-puko-600 shrink-0" />
+                <span>{formatIndonesianMonthShortYear(selectedMonth)}</span>
+                {selectedMonth === currentMonthStr && (
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-extrabold ml-1">
+                    Bulan Ini
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                {selectedMonth !== currentMonthStr && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMonth(currentMonthStr)}
+                    className="px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg bg-puko-50 border border-puko-200 text-puko-700 hover:bg-puko-100 text-[11px] font-bold transition-colors cursor-pointer select-none"
+                  >
+                    Bulan Ini
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleNextMonth}
+                  disabled={selectedMonth >= currentMonthStr}
+                  className={`p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg border text-xs font-bold transition-colors flex items-center gap-1 ${
+                    selectedMonth >= currentMonthStr
+                      ? 'bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-puko-600 shadow-2xs cursor-pointer'
+                  }`}
+                  title="Pilih bulan berikutnya"
+                >
+                  <span className="hidden sm:inline">Bulan Berikutnya</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 4 KPI Metric Cards */}

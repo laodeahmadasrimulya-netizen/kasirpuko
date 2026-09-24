@@ -27,6 +27,8 @@ import html2pdf from 'html2pdf.js';
 import { useTransactions } from '../../context/TransactionContext';
 import { useSettings } from '../../context/SettingsContext';
 import { useExpenses } from '../../context/ExpenseContext';
+import { useIngredients } from '../../context/IngredientContext';
+import { isAlpukatShakeItem } from '../../services/ingredientService';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -50,6 +52,7 @@ export const TransactionsPage = () => {
   const { settings } = useSettings();
   const { user, isAdmin } = useAuth();
   const { expenses } = useExpenses();
+  const { ingredients, formatStock } = useIngredients();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMethod, setSelectedMethod] = useState('ALL');
@@ -325,6 +328,135 @@ export const TransactionsPage = () => {
     list.sort((a, b) => b.qty - a.qty);
     return list;
   }, [filteredTransactions]);
+
+  // Hitung jumlah cup minuman pada transaksi yang terfilter
+  const totalDrinkCups = useMemo(() => {
+    let cups = 0;
+    filteredTransactions.forEach((tx) => {
+      tx.items?.forEach((item) => {
+        if (isAlpukatShakeItem(item)) {
+          cups += Number(item.qty) || 1;
+        }
+      });
+    });
+    // Fallback jika tidak ada item spesifik alpukat (misal data legacy), gunakan summary.totalCup
+    return cups > 0 ? cups : summary.totalCup;
+  }, [filteredTransactions, summary.totalCup]);
+
+  // Hitung rincian pemakaian stok bahan baku untuk transaksi yang terfilter
+  const ingredientUsageList = useMemo(() => {
+    if (!ingredients || typeof ingredients !== 'object') return [];
+
+    const list = Object.values(ingredients).filter(
+      (item) =>
+        item &&
+        typeof item === 'object' &&
+        item.name &&
+        typeof item.name === 'string' &&
+        item.id &&
+        !String(item.id).startsWith('_')
+    );
+
+    return list.map((ing) => {
+      const portion = Number(ing.portionPerCup) || 0;
+      let totalUsed = totalDrinkCups * portion;
+
+      // Jika portionPerCup === 0, cek apakah ada item transaksi yang namanya cocok dengan bahan baku ini (misal Topping)
+      if (portion === 0) {
+        let directQty = 0;
+        const ingNameLower = (ing.name || '').toLowerCase();
+        filteredTransactions.forEach((tx) => {
+          tx.items?.forEach((item) => {
+            const itemNameLower = (item.nama || item.name || '').toLowerCase();
+            if (
+              itemNameLower.includes(ingNameLower) ||
+              ingNameLower.includes(itemNameLower)
+            ) {
+              directQty += Number(item.qty) || 1;
+            }
+          });
+        });
+        totalUsed = directQty;
+      }
+
+      const baseUnit = (ing.baseUnit || ing.unit || '').toLowerCase();
+
+      // Format Takaran / Cup
+      let portionLabel = '-';
+      if (portion > 0) {
+        if (baseUnit === 'gram' || ing.unit === 'kg') {
+          portionLabel = `${portion} gr / cup`;
+        } else if (
+          baseUnit === 'ml' ||
+          ing.unit === 'l' ||
+          ing.unit === 'L' ||
+          ing.unit === 'liter'
+        ) {
+          portionLabel = `${portion} ml / cup`;
+        } else {
+          portionLabel = `${portion} ${ing.unit || 'pcs'} / cup`;
+        }
+      } else {
+        portionLabel = 'Sesuai Porsi';
+      }
+
+      // Format Total Pemakaian
+      let usedLabel = '0';
+      let usedShort = '0';
+
+      if (totalUsed === 0) {
+        const u = ing.unit || ing.baseUnit || 'pcs';
+        usedLabel = `0 ${u}`;
+        usedShort = `0 ${u}`;
+      } else if (baseUnit === 'gram' || ing.unit === 'kg') {
+        if (totalUsed >= 1000) {
+          const inKg = (totalUsed / 1000).toLocaleString('id-ID', {
+            minimumFractionDigits: totalUsed % 1000 === 0 ? 0 : 1,
+            maximumFractionDigits: 2,
+          });
+          usedLabel = `${inKg} kg (${totalUsed.toLocaleString('id-ID')} gr)`;
+          usedShort = `${inKg} kg`;
+        } else {
+          usedLabel = `${totalUsed.toLocaleString('id-ID')} gram`;
+          usedShort = `${totalUsed.toLocaleString('id-ID')} g`;
+        }
+      } else if (
+        baseUnit === 'ml' ||
+        ing.unit === 'l' ||
+        ing.unit === 'L' ||
+        ing.unit === 'liter'
+      ) {
+        if (totalUsed >= 1000) {
+          const inL = (totalUsed / 1000).toLocaleString('id-ID', {
+            minimumFractionDigits: totalUsed % 1000 === 0 ? 0 : 1,
+            maximumFractionDigits: 2,
+          });
+          usedLabel = `${inL} Liter (${totalUsed.toLocaleString('id-ID')} ml)`;
+          usedShort = `${inL} L`;
+        } else {
+          usedLabel = `${totalUsed.toLocaleString('id-ID')} ml`;
+          usedShort = `${totalUsed.toLocaleString('id-ID')} ml`;
+        }
+      } else {
+        const u = ing.unit || ing.baseUnit || 'pcs';
+        usedLabel = `${totalUsed.toLocaleString('id-ID')} ${u}`;
+        usedShort = `${totalUsed.toLocaleString('id-ID')} ${u}`;
+      }
+
+      return {
+        id: ing.id,
+        name: ing.name,
+        icon: ing.icon || '📦',
+        category: ing.category || 'Bahan Baku',
+        portion,
+        portionLabel,
+        totalUsed,
+        usedLabel,
+        usedShort,
+        currentStockDisplay: formatStock(ing),
+      };
+    });
+  }, [ingredients, totalDrinkCups, filteredTransactions, formatStock]);
 
   // Readable label for the current period
   const periodLabel = useMemo(() => {
@@ -1321,6 +1453,180 @@ export const TransactionsPage = () => {
                       </td>
                     </tr>
                   </tfoot>
+                </table>
+              </div>
+
+              {/* Tabel Word: Pemakaian Stok Bahan Baku */}
+              <div
+                style={{
+                  marginBottom: reportFormat === 'mobile' ? '14px' : '20px',
+                  pageBreakInside: 'avoid',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: reportFormat === 'mobile' ? '9.5px' : '10.5px',
+                    fontWeight: '700',
+                    color: '#0f172a',
+                    marginBottom: '5px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.3px',
+                  }}
+                >
+                  Pemakaian Stok Bahan Baku:
+                </div>
+                <table
+                  style={{
+                    width: '100%',
+                    borderCollapse: 'collapse',
+                    border: '1px solid #cbd5e1',
+                    fontSize: reportFormat === 'mobile' ? '8.5px' : '9.5px',
+                    backgroundColor: '#ffffff',
+                    tableLayout: 'fixed',
+                    lineHeight: '1.4',
+                  }}
+                >
+                  <thead>
+                    <tr
+                      style={{
+                        backgroundColor: '#f8fafc',
+                        borderBottom: '1px solid #cbd5e1',
+                      }}
+                    >
+                      <th
+                        style={{
+                          padding: reportFormat === 'mobile' ? '5px 2px' : '6px 4px',
+                          border: '1px solid #cbd5e1',
+                          textAlign: 'center',
+                          fontWeight: '600',
+                          color: '#334155',
+                          width: reportFormat === 'mobile' ? '24px' : '32px',
+                        }}
+                      >
+                        No
+                      </th>
+                      <th
+                        style={{
+                          padding: reportFormat === 'mobile' ? '5px 6px' : '6px 10px',
+                          border: '1px solid #cbd5e1',
+                          textAlign: 'left',
+                          fontWeight: '600',
+                          color: '#334155',
+                        }}
+                      >
+                        Nama Bahan Baku
+                      </th>
+                      <th
+                        style={{
+                          padding: reportFormat === 'mobile' ? '5px 6px' : '6px 10px',
+                          border: '1px solid #cbd5e1',
+                          textAlign: 'right',
+                          fontWeight: '600',
+                          color: '#334155',
+                          width: reportFormat === 'mobile' ? '110px' : '180px',
+                        }}
+                      >
+                        Total Pemakaian
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ingredientUsageList.map((item, idx) => (
+                      <tr
+                        key={item.id || idx}
+                        style={{
+                          borderBottom: '1px solid #cbd5e1',
+                          backgroundColor: '#ffffff',
+                        }}
+                      >
+                        <td
+                          style={{
+                            padding: reportFormat === 'mobile' ? '4px 2px' : '5px 4px',
+                            border: '1px solid #cbd5e1',
+                            textAlign: 'center',
+                            color: '#64748b',
+                          }}
+                        >
+                          {idx + 1}
+                        </td>
+                        <td
+                          style={{
+                            padding: reportFormat === 'mobile' ? '4px 6px' : '5px 10px',
+                            border: '1px solid #cbd5e1',
+                            color: '#0f172a',
+                          }}
+                        >
+                          <div style={{ fontWeight: '600' }}>
+                            <span>{item.name}</span>
+                          </div>
+                          {reportFormat === 'a4' && item.category && (
+                            <div
+                              style={{
+                                fontSize: '8px',
+                                color: '#64748b',
+                                marginTop: '1px',
+                              }}
+                            >
+                              {item.category}
+                            </div>
+                          )}
+                        </td>
+                        <td
+                          style={{
+                            padding: reportFormat === 'mobile' ? '4px 6px' : '5px 10px',
+                            border: '1px solid #cbd5e1',
+                            textAlign: 'right',
+                            fontWeight: '700',
+                            color: '#0f172a',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {reportFormat === 'mobile' ? item.usedShort : item.usedLabel}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* Tabel Tambahan: Total Cup Terpakai */}
+                <table
+                  style={{
+                    width: '100%',
+                    borderCollapse: 'collapse',
+                    border: '1px solid #cbd5e1',
+                    backgroundColor: '#ffffff',
+                    fontSize: reportFormat === 'mobile' ? '9px' : '10px',
+                    lineHeight: '1.5',
+                    marginTop: '5px',
+                  }}
+                >
+                  <tbody>
+                    <tr style={{ backgroundColor: '#f0fdf4' }}>
+                      <td
+                        style={{
+                          padding: reportFormat === 'mobile' ? '6px 8px' : '7px 10px',
+                          color: '#15803d',
+                          fontWeight: '700',
+                          border: '1px solid #cbd5e1',
+                        }}
+                      >
+                        Total Cup Terpakai
+                      </td>
+                      <td
+                        style={{
+                          padding: reportFormat === 'mobile' ? '6px 8px' : '7px 10px',
+                          color: '#15803d',
+                          fontWeight: '800',
+                          textAlign: 'right',
+                          border: '1px solid #cbd5e1',
+                          whiteSpace: 'nowrap',
+                          width: reportFormat === 'mobile' ? '110px' : '180px',
+                        }}
+                      >
+                        {totalDrinkCups} Cup
+                      </td>
+                    </tr>
+                  </tbody>
                 </table>
               </div>
 
