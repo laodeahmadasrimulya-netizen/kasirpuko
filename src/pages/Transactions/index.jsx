@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   Sliders,
   Smartphone,
+  ChevronDown,
 } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import { useTransactions } from '../../context/TransactionContext';
@@ -42,6 +43,7 @@ import {
 } from '../../utils/date';
 import { playPrintReceiptSound } from '../../utils/sound';
 import { useAuth } from '../../hooks/useAuth';
+import { CalendarFilterModal } from '../../components/transactions/CalendarFilterModal';
 
 export const TransactionsPage = () => {
   const { transactions, setActiveReceipt, clearHistory } = useTransactions();
@@ -51,13 +53,33 @@ export const TransactionsPage = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMethod, setSelectedMethod] = useState('ALL');
-  const [dateFilter, setDateFilter] = useState('TODAY'); // 'TODAY' | 'YESTERDAY' | 'CUSTOM'
+  const [dateFilter, setDateFilter] = useState('TODAY'); // 'TODAY' | 'YESTERDAY' | 'MONTH'
   const [customStartDate, setCustomStartDate] = useState(
     formatDateInput(new Date())
   );
   const [customEndDate, setCustomEndDate] = useState(
     formatDateInput(new Date())
   );
+  const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
+  const [monthFilterLabel, setMonthFilterLabel] = useState('');
+
+  const currentMonthName = useMemo(() => {
+    const INDO_MONTHS_FULL = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    if (customStartDate) {
+      const parts = customStartDate.split('-');
+      if (parts.length >= 2) {
+        const mIdx = parseInt(parts[1], 10) - 1;
+        if (mIdx >= 0 && mIdx < 12) {
+          return INDO_MONTHS_FULL[mIdx];
+        }
+      }
+    }
+    const now = new Date();
+    return INDO_MONTHS_FULL[now.getMonth()];
+  }, [customStartDate]);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportFormat, setReportFormat] = useState('mobile'); // 'mobile' (Pas Layar HP) | 'a4' (Standar A4)
@@ -117,7 +139,7 @@ export const TransactionsPage = () => {
           999
         );
         matchesDate = txDate >= start && txDate <= end;
-      } else if (dateFilter === 'CUSTOM') {
+      } else if (dateFilter === 'MONTH' || dateFilter === 'CUSTOM') {
         if (customStartDate && customEndDate) {
           const s = new Date(customStartDate + 'T00:00:00');
           const e = new Date(customEndDate + 'T23:59:59.999');
@@ -253,7 +275,7 @@ export const TransactionsPage = () => {
           999
         );
         return expDate >= start && expDate <= end;
-      } else if (dateFilter === 'CUSTOM') {
+      } else if (dateFilter === 'MONTH' || dateFilter === 'CUSTOM') {
         if (customStartDate && customEndDate) {
           const s = new Date(customStartDate + 'T00:00:00');
           const e = new Date(customEndDate + 'T23:59:59.999');
@@ -334,17 +356,21 @@ export const TransactionsPage = () => {
       );
       return `30 Hari Terakhir (${formatDateOnly(start)} - ${formatDateOnly(now)})`;
     }
-    if (dateFilter === 'CUSTOM') {
+    if (dateFilter === 'MONTH' || dateFilter === 'CUSTOM') {
+      if (monthFilterLabel) return monthFilterLabel;
       if (customStartDate && customEndDate) {
-        return `Rentang: ${formatDateOnly(customStartDate)} s/d ${formatDateOnly(customEndDate)}`;
+        if (customStartDate === customEndDate) {
+          return formatDateOnly(customStartDate);
+        }
+        return `${formatDateOnly(customStartDate)} s/d ${formatDateOnly(customEndDate)}`;
       }
       if (customStartDate) {
         return `Tanggal: ${formatDateOnly(customStartDate)}`;
       }
-      return 'Tanggal Ditentukan';
+      return 'Bulan Ini';
     }
     return 'Semua Waktu';
-  }, [dateFilter, customStartDate, customEndDate]);
+  }, [dateFilter, customStartDate, customEndDate, monthFilterLabel]);
 
   // Label for who printed the report: Admin if admin, cashier name if cashier
   const printedBy = useMemo(() => {
@@ -539,62 +565,59 @@ export const TransactionsPage = () => {
             {[
               { id: 'TODAY', label: 'Hari Ini' },
               { id: 'YESTERDAY', label: 'Kemarin' },
-              { id: 'CUSTOM', label: 'Pilih Waktu' },
+              { id: 'MONTH', label: 'Bulan Ini' },
             ].map((btn) => (
               <button
                 key={btn.id}
                 type="button"
-                onClick={() => setDateFilter(btn.id)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all select-none ${
+                onClick={() => {
+                  if (btn.id === 'MONTH') {
+                    // Set default to 1st of month until today (if same month)
+                    const now = new Date();
+                    const startStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+                    const endStr = formatDateInput(now);
+                    setCustomStartDate(startStr);
+                    setCustomEndDate(endStr);
+                    setDateFilter('MONTH');
+                    // Do not open calendar modal directly to avoid disturbing the user
+                  } else {
+                    setDateFilter(btn.id);
+                  }
+                }}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all select-none flex items-center gap-1.5 cursor-pointer ${
                   dateFilter === btn.id
                     ? 'bg-puko-600 text-white shadow-sm'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                {btn.label}
+                {btn.id === 'MONTH' && <Calendar className="w-3.5 h-3.5" />}
+                <span>{btn.label}</span>
               </button>
             ))}
           </div>
 
-          {/* Form Pemilihan Tanggal jika CUSTOM dipilih */}
-          {dateFilter === 'CUSTOM' && (
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex flex-wrap items-center gap-2.5 animate-fadeIn">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
-                <CalendarRange className="w-4 h-4 text-slate-500" />
-                <span>Pilih Rentang Tanggal:</span>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-300 text-xs shadow-2xs">
-                  <span className="text-slate-500 font-medium text-[11px]">Dari:</span>
-                  <input
-                    type="date"
-                    value={customStartDate}
-                    onChange={(e) => setCustomStartDate(e.target.value)}
-                    className="border-none bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
-                  />
+          {/* Box Bulan Terpilih (Warna hijau PUKO, klik langsung buka kalender) */}
+          {dateFilter === 'MONTH' && (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setIsCalendarModalOpen(true)}
+              className="p-3 sm:p-3.5 bg-puko-600 hover:bg-puko-700 text-white rounded-2xl flex items-center justify-between shadow-soft cursor-pointer transition-all active:scale-[0.99] border border-puko-500/40 group select-none animate-fadeIn"
+              title="Klik untuk membuka kalender atau ganti bulan"
+            >
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/20 flex items-center justify-center text-white shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                  <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                 </div>
-                <span className="text-slate-500 text-xs font-bold">s/d</span>
-                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-300 text-xs shadow-2xs">
-                  <span className="text-slate-500 font-medium text-[11px]">Sampai:</span>
-                  <input
-                    type="date"
-                    value={customEndDate}
-                    onChange={(e) => setCustomEndDate(e.target.value)}
-                    className="border-none bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
-                  />
-                </div>
+                <span className="text-sm sm:text-base font-extrabold text-white capitalize tracking-wide">
+                  {currentMonthName}
+                </span>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const todayStr = formatDateInput(new Date());
-                  setCustomStartDate(todayStr);
-                  setCustomEndDate(todayStr);
-                }}
-                className="text-xs text-puko-700 hover:text-puko-800 underline font-bold ml-auto"
-              >
-                Setel ke Hari Ini
-              </button>
+
+              <div className="flex items-center gap-1.5 text-xs font-bold text-white/90 bg-white/15 px-3 py-1.5 rounded-xl group-hover:bg-white/25 transition-colors">
+                <span>Ubah</span>
+                <ChevronDown className="w-3.5 h-3.5 group-hover:translate-y-0.5 transition-transform" />
+              </div>
             </div>
           )}
         </div>
@@ -1838,6 +1861,21 @@ export const TransactionsPage = () => {
           </div>
         </div>
       </Modal>
+
+      {/* MODAL KALENDER & PEMILIH BULAN (SESUAI GAMBAR 1 & 2) */}
+      <CalendarFilterModal
+        isOpen={isCalendarModalOpen}
+        onClose={() => setIsCalendarModalOpen(false)}
+        initialStartDate={customStartDate}
+        initialEndDate={customEndDate}
+        transactions={transactions}
+        onConfirm={({ startDate, endDate, label }) => {
+          setCustomStartDate(startDate);
+          setCustomEndDate(endDate);
+          setMonthFilterLabel(label);
+          setDateFilter('MONTH');
+        }}
+      />
     </div>
   );
 };

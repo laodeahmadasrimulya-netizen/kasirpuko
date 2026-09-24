@@ -10,6 +10,7 @@ import {
   Minus,
   Trash2,
   PackagePlus,
+  ArrowLeft,
 } from 'lucide-react';
 import { useIngredients } from '../../context/IngredientContext';
 
@@ -75,11 +76,21 @@ export const IngredientStockWidget = () => {
   const [stockDisplayInput, setStockDisplayInput] = useState('7');
   const [activeUnit, setActiveUnit] = useState('kg');
 
+  // Add new stock item state
+  const [isAddStockOpen, setIsAddStockOpen] = useState(false);
+  const [newStockName, setNewStockName] = useState('');
+  const [newStockIcon, setNewStockIcon] = useState('🍫');
+  const [newStockType, setNewStockType] = useState('weight'); // 'weight' | 'volume' | 'pcs'
+  const [newStockInitial, setNewStockInitial] = useState('5');
+  const [newStockPortion, setNewStockPortion] = useState('20');
+
   // Portions draft state
   const [portionDraft, setPortionDraft] = useState({});
 
   // Toast notification
   const [successToast, setSuccessToast] = useState('');
+  // Delete confirmation state
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
 
   const showToast = (msg) => {
     setSuccessToast(msg);
@@ -92,6 +103,14 @@ export const IngredientStockWidget = () => {
   const isWeightUnit = (item) => {
     const base = (item?.baseUnit || '').toLowerCase();
     return base === 'gram' || item?.unit === 'kg';
+  };
+
+  // Helper get available units for an item
+  const getAvailableUnits = (item) => {
+    const base = (item?.baseUnit || item?.unit || '').toLowerCase();
+    if (base === 'gram' || item?.unit === 'kg') return ['gram', 'kg'];
+    if (base === 'ml' || item?.unit === 'l' || item?.unit === 'L' || item?.unit === 'liter') return ['ml', 'L'];
+    return [item?.unit || 'pcs'];
   };
 
   // Helper convert base (gram/ml) to display value for a unit
@@ -117,7 +136,8 @@ export const IngredientStockWidget = () => {
     setInitialStockBase(initialVal);
 
     const isW = isWeightUnit(target);
-    const defaultUnit = isW ? 'kg' : 'L';
+    const isV = (target?.baseUnit || '').toLowerCase() === 'ml' || target?.unit === 'l' || target?.unit === 'L';
+    const defaultUnit = isW ? 'kg' : isV ? 'L' : (target?.unit || 'pcs');
     setActiveUnit(defaultUnit);
     setStockDisplayInput(toDisplayVal(currentVal, defaultUnit));
     setInitialStockDisplayInput(toDisplayVal(initialVal, defaultUnit));
@@ -126,6 +146,7 @@ export const IngredientStockWidget = () => {
   // Open Edit Modal
   const handleOpenEditModal = (key = 'alpukat') => {
     const targetKey = ingredients[key] ? key : 'alpukat';
+    setIsAddStockOpen(false);
     handleSelectIngredient(targetKey);
     setIsEditModalOpen(true);
   };
@@ -162,9 +183,10 @@ export const IngredientStockWidget = () => {
   // When user clicks "Tambah Stok":
   // jika kg / L -> tambah 1 kg / 1 L (+1000 base)
   // jika gram / ml -> tambah 100 gram / 100 ml (+100 base)
+  // jika pcs -> tambah 1 pcs (+1 base)
   const handleAddStock = () => {
     const isLarge = activeUnit === 'kg' || activeUnit === 'L';
-    const delta = isLarge ? 1000 : 100;
+    const delta = isLarge ? 1000 : (activeUnit === 'pcs' ? 1 : 100);
     const nextVal = currentStockBase + delta;
     setCurrentStockBase(nextVal);
     setStockDisplayInput(toDisplayVal(nextVal, activeUnit));
@@ -173,9 +195,10 @@ export const IngredientStockWidget = () => {
   // When user clicks "Kurang Stok":
   // jika kg / L -> kurang 1 kg / 1 L (-1000 base)
   // jika gram / ml -> kurang 100 gram / 100 ml (-100 base)
+  // jika pcs -> kurang 1 pcs (-1 base)
   const handleSubtractStock = () => {
     const isLarge = activeUnit === 'kg' || activeUnit === 'L';
-    const delta = isLarge ? 1000 : 100;
+    const delta = isLarge ? 1000 : (activeUnit === 'pcs' ? 1 : 100);
     const nextVal = Math.max(0, currentStockBase - delta);
     setCurrentStockBase(nextVal);
     setStockDisplayInput(toDisplayVal(nextVal, activeUnit));
@@ -193,14 +216,67 @@ export const IngredientStockWidget = () => {
     setIsEditModalOpen(false);
   };
 
-  // Delete custom ingredient
-  const handleDeleteCustom = (key, name) => {
-    if (window.confirm(`Hapus bahan baku "${name}" dari daftar stok?`)) {
-      deleteIngredient(key);
-      showToast(`Bahan baku "${name}" telah dihapus!`);
-      if (selectedKey === key) {
-        setSelectedKey('alpukat');
-      }
+  // Handle Add New Stock item
+  const handleAddNewStock = (e) => {
+    e?.preventDefault();
+    if (!newStockName.trim()) return;
+
+    let baseStock = Number(newStockInitial) || 0;
+    let baseUnit = 'gram';
+    let unit = 'kg';
+
+    if (newStockType === 'volume') {
+      baseUnit = 'ml';
+      unit = 'L';
+      baseStock = Math.round(baseStock * 1000);
+    } else if (newStockType === 'weight') {
+      baseUnit = 'gram';
+      unit = 'kg';
+      baseStock = Math.round(baseStock * 1000);
+    } else {
+      baseUnit = 'pcs';
+      unit = 'pcs';
+      baseStock = Math.round(baseStock);
+    }
+
+    const id = `ing_${Date.now()}`;
+    const newIngredientData = {
+      id,
+      name: newStockName.trim(),
+      category: 'Bahan Tambahan',
+      unit,
+      baseUnit,
+      currentStock: baseStock,
+      initialStock: baseStock,
+      maxStock: baseStock > 0 ? baseStock : 5000,
+      minStockAlert: Math.round(baseStock * 0.2) || 500,
+      portionPerCup: Number(newStockPortion) || 0,
+      icon: newStockIcon.trim() || '📦',
+      isCustom: true,
+    };
+
+    addIngredient(newIngredientData);
+    showToast(`Bahan "${newStockName.trim()}" berhasil ditambahkan ke stok pantauan!`);
+    setIsAddStockOpen(false);
+    setIsEditModalOpen(false);
+    handleSelectIngredient(id);
+    setNewStockName('');
+    setNewStockIcon('');
+  };
+
+  // Execute delete after confirmation
+  const handleExecuteDelete = () => {
+    if (!deleteConfirmTarget) return;
+    const { id, name } = deleteConfirmTarget;
+    deleteIngredient(id);
+    showToast(`Bahan baku "${name}" telah dihapus!`);
+    setDeleteConfirmTarget(null);
+
+    const remaining = ingredientList.filter((item) => item.id !== id);
+    if (remaining.length > 0) {
+      handleSelectIngredient(remaining[0].id);
+    } else {
+      setIsEditModalOpen(false);
     }
   };
 
@@ -297,18 +373,6 @@ export const IngredientStockWidget = () => {
                 key={key}
                 className="p-4 rounded-2xl border border-slate-200/80 bg-white shadow-soft transition-all relative group"
               >
-                {/* Delete button for custom ingredients */}
-                {data.isCustom && (
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteCustom(key, data.name)}
-                    className="absolute top-3 right-4 text-slate-400 hover:text-rose-600 transition-colors p-1 rounded-md cursor-pointer"
-                    title={`Hapus ${data.name}`}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-
                 {/* Top Row: Icon & Name */}
                 <div className="flex items-center gap-2.5">
                   <span className="text-2xl p-1.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 shadow-2xs">
@@ -388,138 +452,330 @@ export const IngredientStockWidget = () => {
             </button>
 
             {/* Modal Header */}
-            <div className="flex items-center gap-2.5 mb-5">
-              <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
-                <Pencil className="w-5 h-5" />
-              </div>
-              <h3 className="font-extrabold text-slate-900 text-base">Kelola & Edit Stok</h3>
-            </div>
-
-            <form onSubmit={handleSaveStock} className="space-y-4">
-              {/* Pilihan 3 Bahan Baku: Alpukat, Susu UHT, Susu Kental Manis */}
-              <div className="grid grid-cols-3 gap-2">
-                {ingredientList.map((item) => {
-                  const isSelected = selectedKey === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => handleSelectIngredient(item.id)}
-                      className={`p-2.5 sm:p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1.5 ${
-                        isSelected
-                          ? 'border-slate-800 bg-slate-50 text-slate-900 font-extrabold shadow-xs ring-1 ring-slate-800'
-                          : 'border-slate-200 hover:bg-slate-50 text-slate-600 font-bold'
-                      }`}
-                    >
-                      <span className="text-2xl">{item.icon}</span>
-                      <span className="text-[11px] sm:text-xs leading-tight truncate w-full text-center">
-                        {item.name}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Stok Awal (Bisa diedit sebagai patokan kapasitas) */}
-              <div className="pt-1">
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Stok Awal:
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    step={activeUnit === 'kg' || activeUnit === 'L' ? '0.1' : '1'}
-                    min="0"
-                    value={initialStockDisplayInput}
-                    onChange={handleDirectInitialStockChange}
-                    required
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-puko-500 text-sm font-extrabold text-slate-900 pr-14"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">
-                    {activeUnit}
-                  </span>
+            {!isAddStockOpen ? (
+              <div className="flex items-center gap-2.5 mb-5">
+                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                  <Pencil className="w-5 h-5" />
                 </div>
+                <h3 className="font-extrabold text-slate-900 text-base">Kelola & Edit Stok</h3>
               </div>
+            ) : (
+              <div className="flex items-center gap-2.5 mb-5 pb-3 border-b border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddStockOpen(false)}
+                  className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
+                  title="Kembali"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                <h3 className="font-extrabold text-slate-900 text-base">Tambah Stok Pantauan</h3>
+              </div>
+            )}
 
-              {/* Stok Sekarang (Patokan - bisa diedit langsung) dengan pemilih gram/kg atau ml/L di sebelah kanannya */}
+            {isAddStockOpen ? (
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Stok Sekarang:
-                </label>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
+                <form onSubmit={handleAddNewStock} className="space-y-3.5">
+                  {/* Nama Bahan */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Nama:
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="misal: Coklat Bubuk, Keju, Gula Aren..."
+                      value={newStockName}
+                      onChange={(e) => setNewStockName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-puko-500 text-sm font-bold text-slate-900"
+                    />
+                  </div>
+
+                  {/* Pilihan Ikon */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Ikon:
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-xl shrink-0 select-none shadow-2xs">
+                        {newStockIcon.trim() || '📦'}
+                      </div>
+                      <input
+                        type="text"
+                        value={newStockIcon}
+                        onChange={(e) => setNewStockIcon(e.target.value)}
+                        placeholder="Pilih atau ketik ikon dari HP (misal: 🍫, 🧀)"
+                        className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-puko-500 text-sm font-bold text-slate-900"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                      <span className="text-[10px] text-slate-400 font-medium">Contoh:</span>
+                      {['🍫', '🧀', '🍯', '🥥', '🍓', '☕', '🥤', '🧊', '📦'].map((emoji) => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => setNewStockIcon(emoji)}
+                          className={`w-6 h-6 rounded-md text-xs flex items-center justify-center transition-all cursor-pointer ${
+                            newStockIcon === emoji
+                              ? 'bg-slate-800 text-white shadow-2xs scale-105'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Satuan */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Satuan:
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { type: 'weight', label: 'Berat (kg / g)' },
+                        { type: 'volume', label: 'Cairan (L / ml)' },
+                        { type: 'pcs', label: 'Satuan (pcs)' },
+                      ].map((t) => (
+                        <button
+                          key={t.type}
+                          type="button"
+                          onClick={() => {
+                            setNewStockType(t.type);
+                            if (t.type === 'weight') setNewStockInitial('5');
+                            if (t.type === 'volume') setNewStockInitial('5');
+                            if (t.type === 'pcs') setNewStockInitial('50');
+                          }}
+                          className={`py-2 px-2 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer ${
+                            newStockType === t.type
+                              ? 'border-slate-800 bg-slate-100 text-slate-900 font-extrabold ring-1 ring-slate-800'
+                              : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Stok Awal & Takaran per Cup */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Stok Awal ({newStockType === 'weight' ? 'kg' : newStockType === 'volume' ? 'Liter' : 'pcs'}):
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step={newStockType === 'pcs' ? '1' : '0.1'}
+                        required
+                        value={newStockInitial}
+                        onChange={(e) => setNewStockInitial(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-puko-500 text-sm font-bold text-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Takaran per Cup:
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={newStockPortion}
+                        onChange={(e) => setNewStockPortion(e.target.value)}
+                        placeholder="0"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-puko-500 text-sm font-bold text-slate-900"
+                      />
+                      <span className="text-[10px] text-slate-400 mt-0.5 block">
+                        {newStockType === 'weight' ? 'gram / cup' : newStockType === 'volume' ? 'ml / cup' : 'pcs / cup'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Tombol Aksi */}
+                  <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddStockOpen(false)}
+                      className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 rounded-xl text-xs font-extrabold bg-puko-600 hover:bg-puko-700 text-white shadow-md transition-all active:scale-95 cursor-pointer"
+                    >
+                      + Tambahkan Bahan
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : (
+              <form onSubmit={handleSaveStock} className="space-y-4">
+                {/* Pilihan Bahan Baku + Tombol + di Samping Kanan Susu Kental Manis */}
+                <div className="grid grid-cols-4 gap-2">
+                  {ingredientList.map((item) => {
+                    const isSelected = selectedKey === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => handleSelectIngredient(item.id)}
+                        className={`p-2 sm:p-2.5 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1 relative ${
+                          isSelected
+                            ? 'border-slate-800 bg-slate-50 text-slate-900 font-extrabold shadow-xs ring-1 ring-slate-800'
+                            : 'border-slate-200 hover:bg-slate-50 text-slate-600 font-bold'
+                        }`}
+                      >
+                        <span className="text-xl sm:text-2xl">{item.icon}</span>
+                        <span className="text-[10px] sm:text-[11px] leading-tight truncate w-full text-center">
+                          {item.name}
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                  {/* Tombol + di Samping Kanan Susu Kental Manis */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewStockName('');
+                      setNewStockIcon('');
+                      setNewStockType('weight');
+                      setNewStockInitial('5');
+                      setNewStockPortion('20');
+                      setIsAddStockOpen(true);
+                    }}
+                    className="p-2 sm:p-2.5 rounded-2xl border border-dashed border-slate-300 hover:border-slate-700 hover:bg-slate-50 text-slate-400 hover:text-slate-800 transition-all cursor-pointer flex flex-col items-center justify-center gap-1"
+                    title="Tambah stok yang ingin dipantau"
+                  >
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600">
+                      <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </div>
+                    <span className="text-[10px] sm:text-[11px] font-bold leading-tight truncate w-full text-center">
+                      Tambah
+                    </span>
+                  </button>
+                </div>
+
+                {/* Stok Awal (Bisa diedit sebagai patokan kapasitas) */}
+                <div className="pt-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Stok Awal:
+                  </label>
+                  <div className="relative">
                     <input
                       type="number"
                       step={activeUnit === 'kg' || activeUnit === 'L' ? '0.1' : '1'}
                       min="0"
-                      value={stockDisplayInput}
-                      onChange={handleDirectStockChange}
+                      value={initialStockDisplayInput}
+                      onChange={handleDirectInitialStockChange}
                       required
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-puko-500 text-sm font-extrabold text-slate-900"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-puko-500 text-sm font-extrabold text-slate-900 pr-14"
                     />
-                  </div>
-
-                  {/* Pilihan Satuan di sebelah kanan input Stok Sekarang */}
-                  <div className="flex bg-slate-100 p-1 rounded-xl gap-1 shrink-0 items-center">
-                    {(isWeightUnit(currentSelected) ? ['gram', 'kg'] : ['ml', 'L']).map((unit) => {
-                      const isUnitSelected = activeUnit === unit;
-                      return (
-                        <button
-                          key={unit}
-                          type="button"
-                          onClick={() => handleUnitChange(unit)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
-                            isUnitSelected
-                              ? 'bg-white text-slate-900 shadow-xs ring-1 ring-slate-200/80'
-                              : 'text-slate-500 hover:text-slate-800'
-                          }`}
-                        >
-                          {unit}
-                        </button>
-                      );
-                    })}
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">
+                      {activeUnit}
+                    </span>
                   </div>
                 </div>
-              </div>
 
-              {/* Tombol Kurang Stok (Kiri) & Tambah Stok (Kanan) */}
-              <div className="grid grid-cols-2 gap-2.5 pt-1">
-                <button
-                  type="button"
-                  onClick={handleSubtractStock}
-                  className="py-2.5 px-3 rounded-xl text-xs font-extrabold bg-rose-600 hover:bg-rose-700 text-white shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                >
-                  <Minus className="w-4 h-4" />
-                  <span>Kurang Stok</span>
-                </button>
+                {/* Stok Sekarang (Patokan - bisa diedit langsung) dengan pemilih satuan di sebelah kanannya */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Stok Sekarang:
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        step={activeUnit === 'kg' || activeUnit === 'L' ? '0.1' : '1'}
+                        min="0"
+                        value={stockDisplayInput}
+                        onChange={handleDirectStockChange}
+                        required
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-puko-500 text-sm font-extrabold text-slate-900"
+                      />
+                    </div>
 
-                <button
-                  type="button"
-                  onClick={handleAddStock}
-                  className="py-2.5 px-3 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Tambah Stok</span>
-                </button>
-              </div>
+                    {/* Pilihan Satuan di sebelah kanan input Stok Sekarang */}
+                    <div className="flex bg-slate-100 p-1 rounded-xl gap-1 shrink-0 items-center">
+                      {getAvailableUnits(currentSelected).map((unit) => {
+                        const isUnitSelected = activeUnit === unit;
+                        return (
+                          <button
+                            key={unit}
+                            type="button"
+                            onClick={() => handleUnitChange(unit)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                              isUnitSelected
+                                ? 'bg-white text-slate-900 shadow-xs ring-1 ring-slate-200/80'
+                                : 'text-slate-500 hover:text-slate-800'
+                            }`}
+                          >
+                            {unit}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
 
-              {/* Tombol Batal & Simpan di bawah kanan */}
-              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-xl text-xs font-extrabold bg-puko-600 hover:bg-puko-700 text-white shadow-md transition-all active:scale-95 cursor-pointer"
-                >
-                  Simpan
-                </button>
-              </div>
-            </form>
+                {/* Tombol Kurang Stok (Kiri) & Tambah Stok (Kanan) */}
+                <div className="grid grid-cols-2 gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleSubtractStock}
+                    className="py-2.5 px-3 rounded-xl text-xs font-extrabold bg-rose-600 hover:bg-rose-700 text-white shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                  >
+                    <Minus className="w-4 h-4" />
+                    <span>Kurang Stok</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleAddStock}
+                    className="py-2.5 px-3 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Tambah Stok</span>
+                  </button>
+                </div>
+
+                {/* Tombol Aksi di bawah: Hapus di kiri, Batal & Simpan di kanan */}
+                <div className="flex items-center justify-between gap-2.5 pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDeleteConfirmTarget({
+                        id: selectedKey,
+                        name: currentSelected?.name || 'bahan ini',
+                      })
+                    }
+                    className="px-3.5 py-2.5 rounded-xl text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus</span>
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditModalOpen(false)}
+                      className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 rounded-xl text-xs font-extrabold bg-puko-600 hover:bg-puko-700 text-white shadow-md transition-all active:scale-95 cursor-pointer"
+                    >
+                      Simpan
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -616,6 +872,43 @@ export const IngredientStockWidget = () => {
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIRMASI HAPUS */}
+      {deleteConfirmTarget && (
+        <div
+          style={{ zIndex: 9999 }}
+          className="fixed inset-0 z-[9999] bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+        >
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 sm:p-6 shadow-2xl border border-slate-100 text-center animate-in zoom-in-95 duration-150 relative">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-3.5 shadow-2xs">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h4 className="font-extrabold text-slate-900 text-base mb-1.5">
+              Konfirmasi Hapus
+            </h4>
+            <p className="text-xs sm:text-sm text-slate-500 mb-5 leading-relaxed">
+              Apakah Anda yakin ingin menghapus stok pantauan{' '}
+              <span className="font-bold text-slate-900">"{deleteConfirmTarget.name}"</span>?
+            </p>
+            <div className="flex items-center justify-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmTarget(null)}
+                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteDelete}
+                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-extrabold text-white bg-rose-600 hover:bg-rose-700 shadow-sm transition-all active:scale-95 cursor-pointer"
+              >
+                Hapus
+              </button>
+            </div>
           </div>
         </div>
       )}
