@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Wallet,
   Plus,
@@ -84,6 +84,12 @@ export const ExpensesPage = () => {
       await addExpense(payload);
       showToast('Pengeluaran berhasil dicatat!');
       setSelectedDate(todayDateStr); // Otomatis aktifkan tanggal hari ini
+      if (pengeluaranScrollRef.current) {
+        pengeluaranScrollRef.current.scrollTo({
+          left: pengeluaranScrollRef.current.scrollWidth,
+          behavior: 'smooth',
+        });
+      }
       setIsFormOpen(false);
     } catch (err) {
       setFormError('Gagal menyimpan pengeluaran. Coba lagi.');
@@ -114,13 +120,15 @@ export const ExpensesPage = () => {
     return `${formatDateOnly(isoString)}, ${timeStr}`;
   };
 
-  // Generate past 7 days ending today (1 minggu ke belakang)
-  const past7Days = useMemo(() => {
+  const pengeluaranScrollRef = useRef(null);
+
+  // Generate 30 hari ke belakang berakhir di hari ini (urutan: hari terlama -> hari ini di paling kanan)
+  const past30Days = useMemo(() => {
     const days = [];
     const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
     const now = new Date();
 
-    for (let i = 6; i >= 0; i--) {
+    for (let i = 29; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(now.getDate() - i);
       const year = d.getFullYear();
@@ -136,6 +144,13 @@ export const ExpensesPage = () => {
       });
     }
     return days;
+  }, []);
+
+  // Otomatis geser scroll ke paling kanan (Hari Ini) saat pertama buka
+  useEffect(() => {
+    if (pengeluaranScrollRef.current) {
+      pengeluaranScrollRef.current.scrollLeft = pengeluaranScrollRef.current.scrollWidth;
+    }
   }, []);
 
   // Today's date string in YYYY-MM-DD
@@ -200,37 +215,60 @@ export const ExpensesPage = () => {
         </Button>
       </div>
 
-      {/* Card: 7-Day Selector di atas, Nominal di kiri dan 'X transaksi' di kanan agar sisi kanan tidak kosong */}
+      {/* Card: Day Selector seperti kereta, Nominal di kiri dan 'X transaksi' di kanan agar sisi kanan tidak kosong */}
       <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-soft space-y-3.5">
-        {/* Selector 1 Minggu ke belakang (Hari & Tanggal) */}
-        <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
-          {past7Days.map((day) => {
+        {/* Selector Hari & Tanggal (Scrollable seperti kereta, hari ini di kanan berbalut hijau) */}
+        <div
+          ref={pengeluaranScrollRef}
+          className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1.5 pt-0.5 px-0.5 scroll-smooth"
+          style={{ scrollbarWidth: 'thin' }}
+        >
+          {past30Days.map((day) => {
             const isSelected = selectedDate === day.dateStr;
             return (
               <button
                 key={day.dateStr}
                 type="button"
                 onClick={() => setSelectedDate(day.dateStr)}
-                className={`py-1.5 px-0.5 sm:py-2 sm:px-1 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer select-none text-center ${
+                className={`min-w-[56px] sm:min-w-[64px] py-2 px-1 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer select-none shrink-0 text-center ${
                   isSelected
-                    ? 'border border-puko-700/60 bg-puko-600 text-white'
+                    ? 'border-2 border-puko-700 bg-puko-600 text-white shadow-sm font-black scale-[1.02]'
+                    : day.isToday
+                    ? 'border-2 border-puko-600 bg-puko-50/90 text-puko-800 font-extrabold hover:bg-puko-100 shadow-2xs'
                     : 'border border-slate-200/80 bg-slate-50/80 hover:bg-slate-100 text-slate-600'
                 }`}
               >
                 <span
-                  className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${
-                    isSelected ? 'text-puko-100 font-bold' : 'text-slate-400'
+                  className={`text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wider ${
+                    isSelected
+                      ? 'text-puko-100'
+                      : day.isToday
+                      ? 'text-puko-700 font-black'
+                      : 'text-slate-400'
                   }`}
                 >
                   {day.dayName}
                 </span>
                 <span
                   className={`text-xs sm:text-sm mt-0.5 ${
-                    isSelected ? 'text-white font-black' : 'text-slate-700 font-bold'
+                    isSelected
+                      ? 'text-white font-black'
+                      : day.isToday
+                      ? 'text-puko-900 font-black'
+                      : 'text-slate-700 font-bold'
                   }`}
                 >
                   {day.dayNumber}
                 </span>
+                {day.isToday && (
+                  <span
+                    className={`text-[8px] px-1 py-0.2 rounded font-extrabold mt-0.5 ${
+                      isSelected ? 'bg-white/20 text-white' : 'bg-puko-600 text-white'
+                    }`}
+                  >
+                    Hari Ini
+                  </span>
+                )}
               </button>
             );
           })}

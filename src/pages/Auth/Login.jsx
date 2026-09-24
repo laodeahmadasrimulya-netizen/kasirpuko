@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ShieldCheck,
@@ -10,20 +10,70 @@ import {
   CheckCircle2,
   X,
   Lock,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { playSuccessSound } from '../../utils/sound';
 
 export const LoginPage = () => {
-  const { login, findUserByPhone, resetPasswordWithPhone } = useAuth();
+  const { login, findUserByPhone, resetPasswordWithPhone, users } = useAuth();
   const navigate = useNavigate();
 
   const [selectedRole, setSelectedRole] = useState('ADMIN'); // 'ADMIN' | 'KASIR'
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
+  const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Akun Admin dan Kasir aktif
+  const adminAccount = useMemo(() => {
+    return (
+      users?.find((u) => u.role === 'ADMIN') || {
+        username: 'admin',
+        pin: '1234',
+        name: 'Owner',
+      }
+    );
+  }, [users]);
+
+  const kasirAccount = useMemo(() => {
+    return (
+      users?.find((u) => u.role === 'KASIR') || {
+        username: 'kasir',
+        pin: '0000',
+        name: 'Kasir 01',
+      }
+    );
+  }, [users]);
+
+  // Handler memilih peran (sekaligus mengisi username & sandi otomatis)
+  const handleSelectRole = (role) => {
+    setSelectedRole(role);
+    setError('');
+    if (role === 'ADMIN') {
+      setUsername(adminAccount.username);
+      setPin(adminAccount.pin);
+    } else {
+      setUsername(kasirAccount.username);
+      setPin(kasirAccount.pin);
+    }
+  };
+
+  // Isi awal saat pertama kali buka aplikasi
+  useEffect(() => {
+    if (!username && !pin) {
+      if (selectedRole === 'ADMIN') {
+        setUsername(adminAccount.username);
+        setPin(adminAccount.pin);
+      } else {
+        setUsername(kasirAccount.username);
+        setPin(kasirAccount.pin);
+      }
+    }
+  }, [selectedRole, adminAccount, kasirAccount]);
 
   // Forgot password modal state
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
@@ -153,34 +203,137 @@ export const LoginPage = () => {
             <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedRole('ADMIN');
-                  setError('');
-                }}
-                className={`py-2.5 px-3 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                onClick={() => handleSelectRole('ADMIN')}
+                className={`py-2 px-3 rounded-xl text-xs font-extrabold transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
                   selectedRole === 'ADMIN'
                     ? 'bg-puko-600 text-white shadow-sm'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <ShieldCheck className="w-4 h-4" />
-                <span>Admin</span>
+                <div className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Admin</span>
+                </div>
+                <span
+                  className={`text-[10px] font-mono ${
+                    selectedRole === 'ADMIN' ? 'text-puko-100' : 'text-slate-500'
+                  }`}
+                >
+                  Sandi:{' '}
+                  <strong
+                    className={
+                      selectedRole === 'ADMIN'
+                        ? 'text-white font-black'
+                        : 'text-puko-700 font-bold'
+                    }
+                  >
+                    {adminAccount.pin}
+                  </strong>
+                </span>
               </button>
 
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedRole('KASIR');
-                  setError('');
-                }}
-                className={`py-2.5 px-3 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                onClick={() => handleSelectRole('KASIR')}
+                className={`py-2 px-3 rounded-xl text-xs font-extrabold transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
                   selectedRole === 'KASIR'
                     ? 'bg-puko-600 text-white shadow-sm'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <User className="w-4 h-4" />
-                <span>Kasir</span>
+                <div className="flex items-center gap-1.5">
+                  <User className="w-4 h-4" />
+                  <span>Kasir</span>
+                </div>
+                <span
+                  className={`text-[10px] font-mono ${
+                    selectedRole === 'KASIR' ? 'text-puko-100' : 'text-slate-500'
+                  }`}
+                >
+                  Sandi:{' '}
+                  <strong
+                    className={
+                      selectedRole === 'KASIR'
+                        ? 'text-white font-black'
+                        : 'text-puko-700 font-bold'
+                    }
+                  >
+                    {kasirAccount.pin}
+                  </strong>
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Card Info Sandi Masuk: Perlihatkan sandi masuk Admin dan Kasir */}
+          <div className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <KeyRound className="w-3.5 h-3.5 text-puko-600" />
+                Sandi Masuk Akun:
+              </span>
+              <span className="text-[10px] text-slate-400 font-semibold">Klik untuk memilih</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {/* Box Admin */}
+              <button
+                type="button"
+                onClick={() => handleSelectRole('ADMIN')}
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                  selectedRole === 'ADMIN'
+                    ? 'border-puko-600 bg-white ring-2 ring-puko-500/20 shadow-xs'
+                    : 'border-slate-200 bg-white/70 hover:bg-white text-slate-600'
+                }`}
+              >
+                <div className="flex items-center justify-between text-xs font-extrabold text-slate-800">
+                  <span className="flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
+                    Admin
+                  </span>
+                  <span className="text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded font-extrabold">
+                    Owner
+                  </span>
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">
+                  User: <span className="font-mono font-bold text-slate-700">{adminAccount.username}</span>
+                </div>
+                <div className="text-[11px] text-slate-600 mt-0.5">
+                  Sandi:{' '}
+                  <span className="font-mono font-black text-puko-700 bg-puko-50 border border-puko-200 px-1.5 py-0.2 rounded">
+                    {adminAccount.pin}
+                  </span>
+                </div>
+              </button>
+
+              {/* Box Kasir */}
+              <button
+                type="button"
+                onClick={() => handleSelectRole('KASIR')}
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                  selectedRole === 'KASIR'
+                    ? 'border-puko-600 bg-white ring-2 ring-puko-500/20 shadow-xs'
+                    : 'border-slate-200 bg-white/70 hover:bg-white text-slate-600'
+                }`}
+              >
+                <div className="flex items-center justify-between text-xs font-extrabold text-slate-800">
+                  <span className="flex items-center gap-1">
+                    <User className="w-3.5 h-3.5 text-emerald-600" />
+                    Kasir
+                  </span>
+                  <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-extrabold">
+                    Outlet
+                  </span>
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">
+                  User: <span className="font-mono font-bold text-slate-700">{kasirAccount.username}</span>
+                </div>
+                <div className="text-[11px] text-slate-600 mt-0.5">
+                  Sandi:{' '}
+                  <span className="font-mono font-black text-puko-700 bg-puko-50 border border-puko-200 px-1.5 py-0.2 rounded">
+                    {kasirAccount.pin}
+                  </span>
+                </div>
               </button>
             </div>
           </div>
@@ -243,13 +396,23 @@ export const LoginPage = () => {
                   <KeyRound className="w-4 h-4" />
                 </div>
                 <input
-                  type="password"
+                  type={showPin ? 'text' : 'password'}
                   value={pin}
                   onChange={(e) => setPin(e.target.value)}
                   placeholder="Masukkan password"
                   required
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white transition-all placeholder:text-slate-400 font-mono tracking-widest"
+                  className={`w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-10 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white transition-all placeholder:text-slate-400 font-mono ${
+                    showPin ? 'tracking-normal font-bold' : 'tracking-widest font-bold'
+                  }`}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPin(!showPin)}
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                  title={showPin ? 'Sembunyikan sandi' : 'Perlihatkan sandi'}
+                >
+                  {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
