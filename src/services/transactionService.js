@@ -2,11 +2,17 @@ import { supabase } from './supabaseClient';
 import { storageService } from './storageService';
 import { generateInvoiceCode } from '../utils/invoice';
 import { isToday } from '../utils/date';
+import { storeService, DEFAULT_STORE_ID } from './storeService';
 
-const STORAGE_KEY = 'transactions';
+const getStorageKey = () => {
+  const storeId = storeService.getActiveStoreId();
+  return storeId === DEFAULT_STORE_ID ? 'transactions' : `transactions_${storeId}`;
+};
 
 const mapFromDB = (tx) => ({
   id: String(tx.id),
+  store_id: tx.store_id || DEFAULT_STORE_ID,
+  storeId: tx.store_id || DEFAULT_STORE_ID,
   timestamp: tx.timestamp,
   cashierName: tx.cashier_name || tx.cashierName || 'Kasir 01',
   cashier_name: tx.cashier_name || tx.cashierName || 'Kasir 01',
@@ -24,20 +30,24 @@ const mapFromDB = (tx) => ({
   items: Array.isArray(tx.items) ? tx.items : [],
 });
 
-const mapToDB = (tx) => ({
-  id: String(tx.id),
-  timestamp: tx.timestamp || new Date().toISOString(),
-  cashier_name: tx.cashierName || tx.cashier_name || 'Kasir 01',
-  customer_name: tx.customerName || tx.customer_name || '',
-  payment_method: tx.paymentMethod || tx.payment_method || 'TUNAI',
-  subtotal: Number(tx.subtotal) || 0,
-  discount: Number(tx.discount) || 0,
-  total: Number(tx.total) || 0,
-  amount_paid: Number(tx.amountPaid ?? tx.amount_paid ?? 0),
-  change: Number(tx.change) || 0,
-  status: tx.status || 'COMPLETED',
-  items: Array.isArray(tx.items) ? tx.items : [],
-});
+const mapToDB = (tx) => {
+  const storeId = tx.store_id || tx.storeId || storeService.getActiveStoreId();
+  return {
+    id: String(tx.id),
+    store_id: storeId,
+    timestamp: tx.timestamp || new Date().toISOString(),
+    cashier_name: tx.cashierName || tx.cashier_name || 'Kasir 01',
+    customer_name: tx.customerName || tx.customer_name || '',
+    payment_method: tx.paymentMethod || tx.payment_method || 'TUNAI',
+    subtotal: Number(tx.subtotal) || 0,
+    discount: Number(tx.discount) || 0,
+    total: Number(tx.total) || 0,
+    amount_paid: Number(tx.amountPaid ?? tx.amount_paid ?? 0),
+    change: Number(tx.change) || 0,
+    status: tx.status || 'COMPLETED',
+    items: Array.isArray(tx.items) ? tx.items : [],
+  };
+};
 const DAY_MS = 1000 * 60 * 60 * 24;
 const now = Date.now();
 
@@ -382,28 +392,50 @@ export const transactionService = {
    * Mengambil semua transaksi dari Supabase (terbaru di atas)
    */
   async getAll() {
+    const storeId = storeService.getActiveStoreId();
+    const storageKey = getStorageKey();
+
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('transactions')
         .select('*')
+        .eq('store_id', storeId)
         .order('timestamp', { ascending: false });
 
-      if (error) throw error;
+      if (error && (error.message?.includes('store_id') || error.code === '42703')) {
+        if (storeId === DEFAULT_STORE_ID) {
+          const retry = await supabase
+            .from('transactions')
+            .select('*')
+            .order('timestamp', { ascending: false });
+          if (!retry.error) {
+            data = retry.data;
+            error = null;
+          }
+        }
+      }
 
-      if (data && Array.isArray(data) && data.length > 0) {
-        const mapped = data.map(mapFromDB);
-        storageService.set(STORAGE_KEY, mapped);
-        return mapped;
+      if (!error && Array.isArray(data)) {
+        if (data.length > 0) {
+          const mapped = data.map(mapFromDB);
+          storageService.set(storageKey, mapped);
+          return mapped;
+        }
+        // Jika toko baru belum memiliki transaksi, kembalikan array kosong (jangan pakai INITIAL_TRANSACTIONS milik PUKO default)
+        if (storeId !== DEFAULT_STORE_ID) {
+          const cached = storageService.get(storageKey, []);
+          return cached.map(mapFromDB);
+        }
       }
     } catch (err) {
       console.warn('[transactionService] Gagal load dari Supabase, memakai cache lokal:', err.message);
     }
 
-    let list = storageService.get(STORAGE_KEY);
-    // Jika storage kosong atau masih seed versi lama
-    if (!list || !Array.isArray(list) || list.length < 8) {
-      list = INITIAL_TRANSACTIONS;
-      storageService.set(STORAGE_KEY, list);
+    let list = storageService.get(storageKey);
+    // Jika storage kosong
+    if (!list || !Array.isArray(list)) {
+      list = storeId === DEFAULT_STORE_ID ? INITIAL_TRANSACTIONS : [];
+      storageService.set(storageKey, list);
     }
     return list.map(mapFromDB);
   },
@@ -412,8 +444,12 @@ export const transactionService = {
    * Menyimpan transaksi penjualan baru ke Supabase dan cache lokal
    */
   async create(payload) {
+    const storeId = storeService.getActiveStoreId();
     const newTx = {
+      ...payload,
       id: payload.id || generateInvoiceCode(),
+      storeId: storeId,
+      store_id: storeId,
       timestamp: payload.timestamp || new Date().toISOString(),
       cashierName: payload.cashierName || 'Kasir 01',
       customerName: payload.customerName?.trim() || '',
@@ -433,7 +469,14 @@ export const transactionService = {
     // Simpan ke Supabase
     try {
       const { error } = await supabase.from('transactions').insert([dbPayload]);
-      if (error) console.warn('[transactionService] create error di Supabase:', error);
+      if (error) {
+        if (error.message?.includes('store_id')) {
+          const { store_id, ...withoutStore } = dbPayload;
+          await supabase.from('transactions').insert([withoutStore]);
+        } else {
+          console.warn('[transactionService] create error di Supabase:', error);
+        }
+      }
     } catch (err) {
       console.warn('[transactionService] create error:', err);
     }
@@ -441,7 +484,7 @@ export const transactionService = {
     // Simpan ke cache lokal
     const transactions = await this.getAll();
     const updated = [newTx, ...transactions.filter((t) => t.id !== newTx.id)];
-    storageService.set(STORAGE_KEY, updated);
+    storageService.set(getStorageKey(), updated);
     return newTx;
   },
 
@@ -472,15 +515,32 @@ export const transactionService = {
   },
 
   /**
+   * Delete transactions by IDs (for deleting a specific filtered batch)
+   */
+  async deleteTransactions(ids) {
+    if (!ids || ids.length === 0) return true;
+    try {
+      await supabase.from('transactions').delete().in('id', ids);
+    } catch (err) {
+      console.warn('[transactionService] deleteTransactions error di Supabase:', err);
+    }
+    const current = storageService.get(getStorageKey(), []);
+    const updated = current.filter((t) => !ids.includes(t.id));
+    storageService.set(getStorageKey(), updated);
+    return true;
+  },
+
+  /**
    * Clear transaction history (for testing / reset)
    */
   async clearHistory() {
+    const storeId = storeService.getActiveStoreId();
     try {
-      await supabase.from('transactions').delete().neq('id', '___non_existent___');
+      await supabase.from('transactions').delete().eq('store_id', storeId);
     } catch (err) {
       console.warn('[transactionService] clearHistory error di Supabase:', err);
     }
-    storageService.set(STORAGE_KEY, []);
+    storageService.set(getStorageKey(), []);
     return true;
   },
 };

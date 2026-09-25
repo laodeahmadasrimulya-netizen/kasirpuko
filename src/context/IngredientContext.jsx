@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { ingredientService } from '../services/ingredientService';
+import { useAuth } from './AuthContext';
 
 const IngredientContext = createContext(null);
 
 export const IngredientProvider = ({ children }) => {
+  const { user } = useAuth();
   const [ingredients, setIngredients] = useState(() => ingredientService.getAll());
 
   // Reload from storage
@@ -11,12 +13,13 @@ export const IngredientProvider = ({ children }) => {
     setIngredients(ingredientService.getAll());
   }, []);
 
-  // Ambil stok bahan baku terbaru dari Supabase saat aplikasi dibuka
+  // Ambil stok bahan baku terbaru dari Supabase saat aplikasi dibuka / ganti toko
   useEffect(() => {
     ingredientService.fetchFromSupabase().then((res) => {
       if (res) setIngredients(res);
+      else reloadIngredients();
     });
-  }, []);
+  }, [user?.storeId, user?.id, reloadIngredients]);
 
   // Sync across tabs/storage changes
   useEffect(() => {

@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { productService } from '../services/productService';
 import { CATEGORIES } from '../data/dummyProducts';
+import { useAuth } from './AuthContext';
 
 const ProductContext = createContext(null);
 
 export const ProductProvider = ({ children }) => {
+  const { user } = useAuth();
   const [products, setProducts] = useState([]);
   const [categories] = useState(CATEGORIES);
   const [selectedCategory, setSelectedCategory] = useState('Semua');
@@ -12,7 +14,7 @@ export const ProductProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Load products on mount
+  // Load products on mount & store change
   const fetchProducts = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -29,7 +31,7 @@ export const ProductProvider = ({ children }) => {
 
   useEffect(() => {
     fetchProducts();
-  }, [fetchProducts]);
+  }, [fetchProducts, user?.storeId, user?.id]);
 
   // Toggle availability (Tersedia / Habis)
   const toggleAvailability = async (id) => {

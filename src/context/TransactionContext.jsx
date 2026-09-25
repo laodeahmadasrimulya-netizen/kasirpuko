@@ -2,10 +2,12 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { transactionService } from '../services/transactionService';
 import { playSuccessSound } from '../utils/sound';
 import { useIngredients } from './IngredientContext';
+import { useAuth } from './AuthContext';
 
 const TransactionContext = createContext(null);
 
 export const TransactionProvider = ({ children }) => {
+  const { user } = useAuth();
   const { deductForOrder } = useIngredients();
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState({
@@ -37,7 +39,7 @@ export const TransactionProvider = ({ children }) => {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+  }, [loadData, user?.storeId, user?.id]);
 
   // Record a new transaction
   const recordTransaction = async (txData) => {
@@ -78,6 +80,18 @@ export const TransactionProvider = ({ children }) => {
     }
   };
 
+  // Delete specific transactions by IDs
+  const deleteTransactions = async (ids) => {
+    try {
+      await transactionService.deleteTransactions(ids);
+      setTransactions((prev) => prev.filter((t) => !ids.includes(t.id)));
+      const sum = await transactionService.getSummary();
+      setSummary(sum);
+    } catch (err) {
+      console.error('Failed to delete transactions', err);
+    }
+  };
+
   const value = {
     transactions,
     summary,
@@ -86,6 +100,7 @@ export const TransactionProvider = ({ children }) => {
     setActiveReceipt,
     recordTransaction,
     clearHistory,
+    deleteTransactions,
     refreshTransactions: loadData,
   };
 

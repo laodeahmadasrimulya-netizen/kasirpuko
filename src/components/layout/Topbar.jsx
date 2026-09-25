@@ -86,9 +86,9 @@ export const Topbar = () => {
             style={{ WebkitTapHighlightColor: 'transparent' }}
             title="Klik untuk beralih akun atau keluar"
           >
-            {/* Tulisan Admin / Kasir: Di sebelah kiri, warna hitam tanpa bayangan kotak */}
+            {/* Tulisan Nama Pengguna / Role: Di sebelah kiri, warna hitam tanpa bayangan kotak */}
             <span className="text-xs sm:text-sm font-black text-slate-900 tracking-tight">
-              {user?.role === 'ADMIN' ? 'Admin' : (user?.name || 'Kasir')}
+              {user?.name || (user?.role === 'ADMIN' ? 'Admin' : 'Kasir')}
             </span>
 
             {/* WhatsApp-Style Default Profile Avatar: Di sebelah kanan, tanpa bayangan */}
@@ -107,10 +107,10 @@ export const Topbar = () => {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-black text-slate-800 truncate">
-                    {user?.name || (user?.role === 'ADMIN' ? 'Owner' : 'Kasir 01')}
+                    {user?.name || (user?.role === 'ADMIN' ? 'Admin' : 'Kasir 01')}
                   </p>
-                  <p className="text-[10px] font-semibold text-slate-400">
-                    {user?.role === 'ADMIN' ? 'Akun Administrator' : 'Akun Kasir Outlet'}
+                  <p className="text-[10px] font-semibold text-slate-400 truncate">
+                    {user?.email || (user?.role === 'ADMIN' ? 'Akun Administrator' : 'Akun Kasir Outlet')}
                   </p>
                 </div>
               </div>

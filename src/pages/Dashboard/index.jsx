@@ -225,22 +225,23 @@ export const DashboardPage = () => {
   const [selectedChartDay, setSelectedChartDay] = useState(null);
 
   // Ref & State untuk fitur geser grafik seperti kereta (Horizontal Train Scroll / Drag)
-  const chartCardRef = useRef(null);
+  const chartTooltipRef = useRef(null);
   const chartScrollRef = useRef(null);
   const isMouseDownRef = useRef(false);
   const dragStartXRef = useRef(0);
   const dragScrollLeftRef = useRef(0);
   const hasScrolledRef = useRef(false);
 
-  // Tutup info jika pengguna mengklik di luar area kartu grafik atau menekan Escape
+  // Tutup info jika pengguna tap / klik 1 kali di luar kotak info atau menekan Escape
   useEffect(() => {
     if (!selectedChartDay) return;
 
-    const handleClickOutside = (e) => {
-      // Jika target klik masih berada di dalam area kartu grafik, abaikan (jangan ditutup)
-      if (chartCardRef.current && chartCardRef.current.contains(e.target)) {
+    const handlePointerDown = (e) => {
+      // Jika tap/klik berada di dalam kotak tooltip info itu sendiri, abaikan
+      if (chartTooltipRef.current && chartTooltipRef.current.contains(e.target)) {
         return;
       }
+      // Tap 1 kali di luar kotak info (di latar belakang grafik atau di mana pun) langsung menutup
       setSelectedChartDay(null);
     };
 
@@ -250,12 +251,15 @@ export const DashboardPage = () => {
       }
     };
 
-    // Gunakan 'click' (bukan 'mousedown') agar urutan event click saat berganti batang tidak terputus
-    document.addEventListener('click', handleClickOutside);
+    // Jeda 10ms agar tap yang memunculkan popover tidak langsung menutupnya
+    const timer = setTimeout(() => {
+      document.addEventListener('pointerdown', handlePointerDown);
+    }, 10);
     document.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      document.removeEventListener('click', handleClickOutside);
+      clearTimeout(timer);
+      document.removeEventListener('pointerdown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [selectedChartDay]);
@@ -779,7 +783,7 @@ export const DashboardPage = () => {
       {/* Selector Bar: Pilihan Harian & Bulanan */}
       <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/80 shadow-soft space-y-3">
         {/* Row 1: Segmented Control (Harian & Bulanan) */}
-        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200/60 self-start">
+        <div className="inline-flex w-fit items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200/60">
           <button
             type="button"
             onClick={() => setFilterMode('harian')}
@@ -811,8 +815,8 @@ export const DashboardPage = () => {
           <div className="animate-fadeIn">
             <div
               ref={harianScrollRef}
-              className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1.5 pt-0.5 px-0.5 scroll-smooth"
-              style={{ scrollbarWidth: 'thin' }}
+              className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1.5 pt-0.5 px-0.5 scroll-smooth no-scrollbar [&::-webkit-scrollbar]:hidden"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {past30Days.map((day) => {
                 const isSelected = selectedDate === day.dateStr;
@@ -821,7 +825,7 @@ export const DashboardPage = () => {
                     key={day.dateStr}
                     type="button"
                     onClick={() => setSelectedDate(day.dateStr)}
-                    className={`min-w-[56px] sm:min-w-[64px] py-2 px-1 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer select-none shrink-0 text-center ${
+                    className={`w-[56px] sm:w-[64px] h-[56px] sm:h-[60px] py-1.5 px-1 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer select-none shrink-0 text-center ${
                       isSelected
                         ? 'border-2 border-puko-700 bg-puko-600 text-white shadow-sm font-black scale-[1.02]'
                         : day.isToday
@@ -851,15 +855,6 @@ export const DashboardPage = () => {
                     >
                       {day.dayNumber}
                     </span>
-                    {day.isToday && (
-                      <span
-                        className={`text-[8px] px-1 py-0.2 rounded font-extrabold mt-0.5 ${
-                          isSelected ? 'bg-white/20 text-white' : 'bg-puko-600 text-white'
-                        }`}
-                      >
-                        Hari Ini
-                      </span>
-                    )}
                   </button>
                 );
               })}
@@ -962,7 +957,7 @@ export const DashboardPage = () => {
       {/* GRAFIK PENJUALAN HARIAN (Dapat digeser seperti kereta untuk melihat hari sebelumnya) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Grafik Batang Geser Seperti Kereta (2 Cols) */}
-        <div ref={chartCardRef} className="lg:col-span-2 space-y-4">
+        <div className="lg:col-span-2 space-y-4">
           <Card padding={false} className="p-5 overflow-hidden relative">
             {/* Header: Judul Grafik Penjualan */}
             <div className="flex items-center gap-2 mb-3">
@@ -977,6 +972,7 @@ export const DashboardPage = () => {
               {/* Floating Info Card: Mengambang & Stay di TENGAH atas grafik seperti sebelumnya */}
               {selectedChartDay && (
                 <div
+                  ref={chartTooltipRef}
                   className="absolute top-1 left-1/2 -translate-x-1/2 z-30 pointer-events-auto animate-in fade-in zoom-in-95 duration-150"
                 >
                   <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/90 px-3.5 py-2.5 text-xs min-w-[200px] select-none hover:border-slate-300 transition-all">
@@ -1050,7 +1046,6 @@ export const DashboardPage = () => {
                     <BarChart
                       data={dailySalesBarData}
                       margin={{ top: 35, right: 12, left: 12, bottom: 0 }}
-                      onClick={handleSelectChartDay}
                     >
                       <CartesianGrid
                         strokeDasharray="3 3"
@@ -1091,7 +1086,7 @@ export const DashboardPage = () => {
                                 y={0}
                                 dy={14}
                                 textAnchor="middle"
-                                fill={isSelected ? '#1b4332' : isToday ? '#2d6a4f' : '#64748b'}
+                                fill={isSelected ? '#15803d' : isToday ? '#16a34a' : '#64748b'}
                                 fontWeight={isSelected || isToday ? '900' : '600'}
                                 fontSize={11}
                               >
@@ -1126,11 +1121,11 @@ export const DashboardPage = () => {
                             (entry.transaksi || 0) > 0;
                           const isSelected = selectedChartDay?.dateKey === entry.dateKey;
 
-                          let barColor = '#52b788';
+                          let barColor = '#22c55e';
                           if (isSelected) {
-                            barColor = '#1b4332';
+                            barColor = '#15803d';
                           } else if (entry.isToday) {
-                            barColor = '#2d6a4f';
+                            barColor = '#16a34a';
                           } else if (!hasTx) {
                             barColor = '#e2e8f0';
                           }
@@ -1333,11 +1328,7 @@ export const DashboardPage = () => {
                         {/* Progress Bar of Sales Volume */}
                         <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              index === 0
-                                ? 'bg-gradient-to-r from-amber-400 to-amber-500'
-                                : 'bg-gradient-to-r from-puko-500 to-emerald-600'
-                            }`}
+                            className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-emerald-500 to-puko-600"
                             style={{ width: `${percentage}%` }}
                           />
                         </div>

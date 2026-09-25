@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { expenseService } from '../services/expenseService';
+import { useAuth } from './AuthContext';
 
 const ExpenseContext = createContext(null);
 
 export const ExpenseProvider = ({ children }) => {
+  const { user } = useAuth();
   const [expenses, setExpenses] = useState([]);
   const [summary, setSummary] = useState({
     todayTotal: 0,
@@ -35,7 +37,7 @@ export const ExpenseProvider = ({ children }) => {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+  }, [loadData, user?.storeId, user?.id]);
 
   // Add new expense
   const addExpense = async (data) => {

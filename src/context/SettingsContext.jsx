@@ -2,10 +2,12 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { settingsService } from '../services/settingsService';
 import { storageService } from '../services/storageService';
 import { DEFAULT_SETTINGS } from '../data/dummySettings';
+import { useAuth } from './AuthContext';
 
 const SettingsContext = createContext(null);
 
 export const SettingsProvider = ({ children }) => {
+  const { user } = useAuth();
   const [settings, setSettings] = useState(() => {
     try {
       const saved = storageService.get('settings');
@@ -43,7 +45,7 @@ export const SettingsProvider = ({ children }) => {
 
   useEffect(() => {
     fetchSettings();
-  }, [fetchSettings]);
+  }, [fetchSettings, user?.storeId, user?.id]);
 
   const updateSettings = async (newData) => {
     try {

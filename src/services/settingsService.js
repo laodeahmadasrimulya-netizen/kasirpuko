@@ -1,8 +1,12 @@
 import { supabase } from './supabaseClient';
 import { storageService } from './storageService';
 import { DEFAULT_SETTINGS } from '../data/dummySettings';
+import { storeService, DEFAULT_STORE_ID } from './storeService';
 
-const STORAGE_KEY = 'settings';
+const getStorageKey = () => {
+  const storeId = storeService.getActiveStoreId();
+  return storeId === DEFAULT_STORE_ID ? 'settings' : `settings_${storeId}`;
+};
 
 // Pemetaan dari kolom Supabase (snake_case) ke format aplikasi (camelCase)
 const mapFromDB = (data) => ({
@@ -38,29 +42,47 @@ const mapToDB = (data) => ({
 
 export const settingsService = {
   /**
-   * Mengambil konfigurasi toko dari Supabase (dengan fallback ke cache lokal)
+   * Mengambil konfigurasi toko aktif dari Supabase / Local Storage
    */
   async get() {
-    try {
-      const { data, error } = await supabase
-        .from('store_settings')
-        .select('*')
-        .eq('id', 1)
-        .single();
+    const storeId = storeService.getActiveStoreId();
+    const storageKey = getStorageKey();
 
-      if (!error && data) {
-        const mapped = mapFromDB(data);
-        storageService.set(STORAGE_KEY, mapped);
-        return mapped;
-      }
-    } catch (err) {
-      console.warn('[settingsService] Gagal load dari Supabase, memakai cache lokal:', err.message);
+    let storeInfo = null;
+    try {
+      storeInfo = await storeService.getStore(storeId);
+    } catch {
+      // ignore
     }
 
-    let settings = storageService.get(STORAGE_KEY);
+    if (storeId === DEFAULT_STORE_ID) {
+      try {
+        const { data, error } = await supabase
+          .from('store_settings')
+          .select('*')
+          .eq('id', 1)
+          .single();
+
+        if (!error && data) {
+          const mapped = mapFromDB(data);
+          storageService.set(storageKey, mapped);
+          return mapped;
+        }
+      } catch (err) {
+        console.warn('[settingsService] Gagal load dari Supabase, memakai cache lokal:', err.message);
+      }
+    }
+
+    let settings = storageService.get(storageKey);
     if (!settings) {
-      settings = DEFAULT_SETTINGS;
-      storageService.set(STORAGE_KEY, settings);
+      settings = {
+        ...DEFAULT_SETTINGS,
+        storeName: storeInfo?.name || (storeId === DEFAULT_STORE_ID ? 'PUKO' : 'Toko Baru'),
+        tagline: storeInfo?.tagline || (storeId === DEFAULT_STORE_ID ? 'Alpukat Kocok No Serat No Pahit' : 'Kasir POS Modern'),
+        phone: storeInfo?.phone || (storeId === DEFAULT_STORE_ID ? '085652103647' : ''),
+        address: storeInfo?.address || (storeId === DEFAULT_STORE_ID ? 'Kendari' : ''),
+      };
+      storageService.set(storageKey, settings);
     }
     return { ...DEFAULT_SETTINGS, ...settings };
   },
@@ -69,21 +91,39 @@ export const settingsService = {
    * Menyimpan pembaruan konfigurasi ke Supabase dan cache lokal
    */
   async update(newData) {
+    const storeId = storeService.getActiveStoreId();
+    const storageKey = getStorageKey();
     const current = await this.get();
     const updated = { ...current, ...newData };
-    const dbPayload = mapToDB(updated);
 
-    try {
-      const { error } = await supabase
-        .from('store_settings')
-        .upsert(dbPayload);
-
-      if (error) console.warn('[settingsService] upsert error di Supabase:', error);
-    } catch (err) {
-      console.warn('[settingsService] update error:', err);
+    // Update profil toko di storeService
+    if (newData.storeName !== undefined || newData.tagline !== undefined || newData.phone !== undefined || newData.address !== undefined) {
+      try {
+        await storeService.updateStore(storeId, {
+          name: updated.storeName,
+          tagline: updated.tagline,
+          phone: updated.phone,
+          address: updated.address,
+        });
+      } catch (err) {
+        console.warn('[settingsService] updateStore notice:', err);
+      }
     }
 
-    storageService.set(STORAGE_KEY, updated);
+    if (storeId === DEFAULT_STORE_ID) {
+      const dbPayload = mapToDB(updated);
+      try {
+        const { error } = await supabase
+          .from('store_settings')
+          .upsert(dbPayload);
+
+        if (error) console.warn('[settingsService] upsert error di Supabase:', error);
+      } catch (err) {
+        console.warn('[settingsService] update error:', err);
+      }
+    }
+
+    storageService.set(storageKey, updated);
     return updated;
   },
 
@@ -91,14 +131,18 @@ export const settingsService = {
    * Reset konfigurasi ke nilai default
    */
   async reset() {
-    const defaultData = mapToDB(DEFAULT_SETTINGS);
-    try {
-      await supabase.from('store_settings').upsert(defaultData);
-    } catch (err) {
-      console.warn('[settingsService] reset error di Supabase:', err);
+    const storeId = storeService.getActiveStoreId();
+    const storageKey = getStorageKey();
+    if (storeId === DEFAULT_STORE_ID) {
+      const defaultData = mapToDB(DEFAULT_SETTINGS);
+      try {
+        await supabase.from('store_settings').upsert(defaultData);
+      } catch (err) {
+        console.warn('[settingsService] reset error di Supabase:', err);
+      }
     }
 
-    storageService.set(STORAGE_KEY, DEFAULT_SETTINGS);
+    storageService.set(storageKey, DEFAULT_SETTINGS);
     return DEFAULT_SETTINGS;
   },
 };

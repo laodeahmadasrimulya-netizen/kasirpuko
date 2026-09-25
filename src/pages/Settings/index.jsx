@@ -97,6 +97,8 @@ export const SettingsPage = () => {
   const [showModalPin, setShowModalPin] = useState(false);
   const [revealedPins, setRevealedPins] = useState({}); // { [userId]: boolean }
   const [userSuccessMessage, setUserSuccessMessage] = useState('');
+  const [userToDelete, setUserToDelete] = useState(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
 
   useEffect(() => {
     if (settings) {
@@ -165,6 +167,7 @@ export const SettingsPage = () => {
       username: '',
       pin: '',
       phone: '',
+      email: '',
       role: 'KASIR',
     });
     setUserModalError('');
@@ -179,6 +182,7 @@ export const SettingsPage = () => {
       username: targetUser.username,
       pin: targetUser.pin,
       phone: targetUser.phone || '',
+      email: targetUser.email || '',
       role: targetUser.role || 'KASIR',
     });
     setUserModalError('');
@@ -192,28 +196,38 @@ export const SettingsPage = () => {
     setUserModalError('');
   };
 
-  const handleSaveUser = (e) => {
+  const [isSavingUser, setIsSavingUser] = useState(false);
+
+  const handleSaveUser = async (e) => {
     e.preventDefault();
     setUserModalError('');
+    setIsSavingUser(true);
 
     try {
       if (editingUser) {
+        // Validasi password admin jika diedit
+        if (editingUser.role === 'ADMIN' && userFormData.pin && userFormData.pin.length < 6) {
+          throw new Error('Password akun Owner minimal 6 karakter.');
+        }
+
         // Update user
-        updateUser(editingUser.id, {
+        await updateUser(editingUser.id, {
           name: userFormData.name,
           username: userFormData.username,
           pin: userFormData.pin,
           phone: userFormData.phone,
+          email: userFormData.email,
           role: editingUser.role || 'KASIR',
         });
         setUserSuccessMessage(`Akun "${userFormData.name}" berhasil diperbarui!`);
       } else {
         // Add new user
-        addUser({
+        await addUser({
           name: userFormData.name,
           username: userFormData.username,
           pin: userFormData.pin,
           phone: userFormData.phone,
+          email: userFormData.email,
           role: 'KASIR',
         });
         setUserSuccessMessage(`Kasir baru "${userFormData.name}" berhasil ditambahkan!`);
@@ -222,32 +236,32 @@ export const SettingsPage = () => {
       handleCloseUserModal();
       setTimeout(() => setUserSuccessMessage(''), 3500);
     } catch (err) {
-      setUserModalError(err.message || 'Terjadi kesalahan saat menyimpan data kasir.');
+      setUserModalError(err.message || 'Terjadi kesalahan saat menyimpan data akun.');
+    } finally {
+      setIsSavingUser(false);
     }
   };
 
   const handleDeleteUser = (targetUser) => {
-    if (targetUser.role === 'ADMIN') {
-      const adminCount = users.filter((u) => u.role === 'ADMIN').length;
-      if (adminCount <= 1) {
-        alert('Tidak dapat menghapus akun Admin utama.');
-        return;
-      }
+    if (targetUser.role === 'ADMIN' || targetUser.id === 'usr-admin') {
+      alert('Akun Owner utama tidak dapat dihapus.');
+      return;
     }
+    setUserToDelete(targetUser);
+  };
 
-    const isCurrent = currentUser?.id === targetUser.id;
-    const confirmMsg = isCurrent
-      ? `Perhatian: Anda sedang login dengan akun "${targetUser.name}". Jika dihapus, Anda akan otomatis logout. Tetap lanjutkan?`
-      : `Apakah Anda yakin ingin menghapus akun kasir "${targetUser.name}" (@${targetUser.username})?`;
-
-    if (window.confirm(confirmMsg)) {
-      try {
-        deleteUser(targetUser.id);
-        setUserSuccessMessage(`Akun "${targetUser.name}" berhasil dihapus.`);
-        setTimeout(() => setUserSuccessMessage(''), 3500);
-      } catch (err) {
-        alert(err.message || 'Gagal menghapus akun.');
-      }
+  const handleConfirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    setIsDeletingUser(true);
+    try {
+      await deleteUser(userToDelete.id);
+      setUserSuccessMessage(`Akun kasir "${userToDelete.name}" berhasil dihapus.`);
+      setTimeout(() => setUserSuccessMessage(''), 3500);
+      setUserToDelete(null);
+    } catch (err) {
+      alert(err.message || 'Gagal menghapus akun.');
+    } finally {
+      setIsDeletingUser(false);
     }
   };
 
@@ -363,7 +377,10 @@ export const SettingsPage = () => {
               <tbody className="divide-y divide-slate-100">
                 {users.map((u) => {
                   const isPinShown = Boolean(revealedPins[u.id]);
-                  const isSelf = currentUser?.id === u.id;
+                  const isSelf =
+                    currentUser?.id === u.id ||
+                    (currentUser?.email && u.email && currentUser.email.toLowerCase() === u.email.toLowerCase()) ||
+                    (currentUser?.username && u.username && currentUser.username.toLowerCase() === u.username.toLowerCase());
                   const isOwner = u.role === 'ADMIN';
 
                   return (
@@ -374,7 +391,7 @@ export const SettingsPage = () => {
                             {u.name}
                             {isOwner && (
                               <span className="text-[10px] bg-amber-100 text-amber-800 font-extrabold px-1.5 py-0.5 rounded border border-amber-200">
-                                Owner Utama
+                                {u.id === 'usr-admin' ? 'Owner Utama' : 'Owner'}
                               </span>
                             )}
                             {isSelf && (
@@ -386,7 +403,7 @@ export const SettingsPage = () => {
                           {isOwner ? (
                             <p className="text-[11px] text-amber-800 font-semibold flex items-center gap-1 mt-0.5">
                               <Mail className="w-3 h-3 text-amber-600" />
-                              {u.email || 'alpukatkocokpuko@gmail.com'}
+                              {u.email || (u.id === 'usr-admin' ? 'alpukatkocokpuko@gmail.com' : '-')}
                             </p>
                           ) : (
                             <p className="text-[11px] text-slate-400">ID: {u.id}</p>
@@ -399,9 +416,15 @@ export const SettingsPage = () => {
                             @{u.username}
                           </span>
                           {u.phone && (
-                            <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1 font-sans">
+                            <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1 font-sans font-medium">
                               <Phone className="w-3 h-3 text-slate-400" />
                               {u.phone}
+                            </p>
+                          )}
+                          {u.email && !isOwner && (
+                            <p className="text-[10px] text-emerald-600 mt-0.5 flex items-center gap-1 font-sans font-medium">
+                              <Mail className="w-3 h-3 text-emerald-500" />
+                              {u.email}
                             </p>
                           )}
                         </div>
@@ -749,7 +772,7 @@ export const SettingsPage = () => {
             <div>
               <Input
                 label="Email Login Owner"
-                value="alpukatkocokpuko@gmail.com"
+                value={editingUser?.email || (editingUser?.id === 'usr-admin' ? 'alpukatkocokpuko@gmail.com' : (currentUser?.email || ''))}
                 readOnly
                 icon={Mail}
                 helperText="Email utama untuk masuk ke akun Owner"
@@ -793,8 +816,12 @@ export const SettingsPage = () => {
 
           <div>
             <Input
-              label="No. Telepon / WhatsApp"
-              placeholder="Contoh: 085652103647"
+              label={
+                editingUser?.role === 'ADMIN'
+                  ? 'No. Telepon / WhatsApp'
+                  : 'No. Telepon / WhatsApp (Utama untuk Login)'
+              }
+              placeholder="Contoh: 085652103647 / 081234567890"
               value={userFormData.phone}
               onChange={(e) =>
                 setUserFormData((prev) => ({
@@ -803,9 +830,30 @@ export const SettingsPage = () => {
                 }))
               }
               icon={Phone}
-              helperText="Digunakan untuk pemulihan password jika lupa"
+              helperText={
+                editingUser?.role === 'ADMIN'
+                  ? 'Owner dapat masuk menggunakan No. HP ini'
+                  : 'Wajib diisi. Kasir dapat masuk/login menggunakan nomor telepon ini'
+              }
+              required
             />
           </div>
+
+          {editingUser?.role !== 'ADMIN' && (
+            <div>
+              <Input
+                label="Email / Gmail Kasir (Opsional)"
+                placeholder="Contoh: kasir@gmail.com (tidak wajib)"
+                type="email"
+                value={userFormData.email || ''}
+                onChange={(e) =>
+                  setUserFormData((prev) => ({ ...prev, email: e.target.value }))
+                }
+                icon={Mail}
+                helperText="Opsional. Kasir juga bisa menggunakan email ini untuk login jika diisi"
+              />
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
@@ -839,8 +887,8 @@ export const SettingsPage = () => {
             </div>
             <p className="text-[11px] text-slate-400">
               {editingUser?.role === 'ADMIN'
-                ? 'Gunakan password yang kuat untuk keamanan toko Anda'
-                : 'PIN / sandi yang akan diketik kasir saat login'}
+                ? 'Minimal 6 karakter. Password ini otomatis disinkronkan ke akun login Owner.'
+                : 'PIN / sandi 4-6 digit yang diketik kasir saat login'}
             </p>
           </div>
 
@@ -850,14 +898,91 @@ export const SettingsPage = () => {
               variant="ghost"
               size="md"
               onClick={handleCloseUserModal}
+              disabled={isSavingUser}
             >
               Batal
             </Button>
-            <Button type="submit" variant="primary" size="md">
-              {editingUser ? 'Simpan Perubahan' : 'Tambah Kasir'}
+            <Button
+              type="submit"
+              variant="primary"
+              size="md"
+              disabled={isSavingUser}
+            >
+              {isSavingUser ? 'Menyimpan...' : editingUser ? 'Simpan Perubahan' : 'Tambah Kasir'}
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* --- MODAL KONFIRMASI HAPUS KASIR (In-App Tanpa Freeze Browser) --- */}
+      <Modal
+        isOpen={Boolean(userToDelete)}
+        onClose={() => {
+          if (!isDeletingUser) setUserToDelete(null);
+        }}
+        title="Hapus Akun Kasir"
+        maxWidth="max-w-md"
+      >
+        <div className="space-y-4">
+          <div className="p-3.5 bg-rose-50 border border-rose-200/80 rounded-2xl flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+              <AlertCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-rose-900">
+                Konfirmasi Penghapusan Kasir
+              </h4>
+              <p className="text-xs text-rose-700 mt-0.5 leading-relaxed">
+                Apakah Anda yakin ingin menghapus akun kasir{' '}
+                <strong>"{userToDelete?.name}"</strong>? Kasir ini tidak akan dapat login lagi ke sistem POS.
+              </p>
+            </div>
+          </div>
+
+          {/* Detail Kasir yang akan dihapus */}
+          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2 text-xs">
+            <div className="flex justify-between items-center pb-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-medium">Nama Kasir:</span>
+              <span className="font-extrabold text-slate-800">{userToDelete?.name}</span>
+            </div>
+            <div className="flex justify-between items-center pb-1.5 border-b border-slate-100">
+              <span className="text-slate-500 font-medium">Username Login:</span>
+              <span className="font-mono font-bold text-slate-700 bg-slate-200/70 px-2 py-0.5 rounded">
+                @{userToDelete?.username}
+              </span>
+            </div>
+            {userToDelete?.phone && (
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-medium">Nomor Telepon:</span>
+                <span className="font-sans font-bold text-slate-800">{userToDelete?.phone}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="outline"
+              size="md"
+              onClick={() => setUserToDelete(null)}
+              disabled={isDeletingUser}
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              size="md"
+              icon={Trash2}
+              disabled={isDeletingUser}
+              onClick={handleConfirmDeleteUser}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+            >
+              {isDeletingUser ? 'Menghapus...' : 'Ya, Hapus Kasir'}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

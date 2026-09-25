@@ -49,7 +49,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { CalendarFilterModal } from '../../components/transactions/CalendarFilterModal';
 
 export const TransactionsPage = () => {
-  const { transactions, setActiveReceipt, clearHistory } = useTransactions();
+  const { transactions, setActiveReceipt, clearHistory, deleteTransactions } = useTransactions();
   const { settings } = useSettings();
   const { user, isAdmin } = useAuth();
   const { expenses } = useExpenses();
@@ -620,13 +620,25 @@ export const TransactionsPage = () => {
     window.print();
   };
 
-  const handleClearHistory = () => {
-    if (
-      window.confirm(
-        'Apakah Anda yakin ingin menghapus seluruh riwayat transaksi sementara di LocalStorage?'
-      )
-    ) {
-      clearHistory();
+  const handleClearHistory = async () => {
+    if (filteredTransactions.length === 0) {
+      alert('Tidak ada transaksi pada filter periode ini untuk dibersihkan.');
+      return;
+    }
+
+    const isAllSelected =
+      dateFilter === 'ALL' && filteredTransactions.length === transactions.length;
+    const confirmMsg = isAllSelected
+      ? `Apakah Anda yakin ingin menghapus seluruh (${transactions.length}) riwayat transaksi?`
+      : `Apakah Anda yakin ingin menghapus ${filteredTransactions.length} transaksi pada periode "${periodLabel}"?`;
+
+    if (window.confirm(confirmMsg)) {
+      if (isAllSelected) {
+        await clearHistory();
+      } else {
+        const idsToDelete = filteredTransactions.map((t) => t.id);
+        await deleteTransactions(idsToDelete);
+      }
     }
   };
 
@@ -654,7 +666,7 @@ export const TransactionsPage = () => {
             icon={FileText}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm"
           >
-            Pratinjau & Export PDF
+            Ekspor PDF, Excel, atau Kirim lewat WA
           </Button>
 
           {isAdmin && transactions.length > 0 && (
@@ -821,16 +833,16 @@ export const TransactionsPage = () => {
           <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
             Pengeluaran
           </p>
-          <p className="text-base sm:text-lg font-black text-slate-900 mt-0.5">
-            {formatIDR(totalPengeluaran)}
+          <p className="text-base sm:text-lg font-black text-rose-600 mt-0.5">
+            - {Number(totalPengeluaran || 0).toLocaleString('id-ID')}
           </p>
         </div>
 
-        <div className="bg-puko-600 rounded-2xl p-3 border border-puko-700/60 text-white">
-          <p className="text-[11px] font-bold text-puko-100 uppercase tracking-wider">
-            Pendapatan Bersih
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-3 shadow-xs">
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            Bersih
           </p>
-          <p className="text-base sm:text-lg font-black text-white mt-0.5">
+          <p className="text-base sm:text-lg font-black text-emerald-600 mt-0.5">
             {formatIDR(totalPendapatanBersih)}
           </p>
         </div>

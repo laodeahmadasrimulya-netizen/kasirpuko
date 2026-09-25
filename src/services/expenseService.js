@@ -1,8 +1,13 @@
 import { supabase } from './supabaseClient';
 import { storageService } from './storageService';
 import { isToday, isYesterday } from '../utils/date';
+import { storeService, DEFAULT_STORE_ID } from './storeService';
 
-const STORAGE_KEY = 'expenses';
+const getStorageKey = () => {
+  const storeId = storeService.getActiveStoreId();
+  return storeId === DEFAULT_STORE_ID ? 'expenses' : `expenses_${storeId}`;
+};
+
 const now = Date.now();
 const DAY_MS = 1000 * 60 * 60 * 24;
 
@@ -21,7 +26,7 @@ export const PAYMENT_SOURCES = [
   { id: 'PRIBADI', label: 'Uang Kasir / Pribadi' },
 ];
 
-// Initial seed expenses
+// Initial seed expenses untuk outlet default
 const INITIAL_EXPENSES = [
   {
     id: `exp-1`,
@@ -47,6 +52,8 @@ const INITIAL_EXPENSES = [
 
 const mapFromDB = (item) => ({
   id: String(item.id),
+  store_id: item.store_id || DEFAULT_STORE_ID,
+  storeId: item.store_id || DEFAULT_STORE_ID,
   timestamp: item.timestamp,
   title: item.title,
   category: item.category,
@@ -58,43 +65,68 @@ const mapFromDB = (item) => ({
   notes: item.notes || '',
 });
 
-const mapToDB = (item) => ({
-  id: String(item.id),
-  timestamp: item.timestamp || new Date().toISOString(),
-  title: item.title?.trim() || 'Pengeluaran Tanpa Nama',
-  category: item.category || 'LAINNYA',
-  amount: Math.max(0, Number(item.amount) || 0),
-  payment_source: item.paymentSource || item.payment_source || 'KAS_KASIR',
-  logged_by: item.loggedBy || item.logged_by || 'Kasir',
-  notes: item.notes?.trim() || '',
-});
+const mapToDB = (item) => {
+  const storeId = item.store_id || item.storeId || storeService.getActiveStoreId();
+  return {
+    id: String(item.id),
+    store_id: storeId,
+    timestamp: item.timestamp || new Date().toISOString(),
+    title: item.title?.trim() || 'Pengeluaran Tanpa Nama',
+    category: item.category || 'LAINNYA',
+    amount: Math.max(0, Number(item.amount) || 0),
+    payment_source: item.paymentSource || item.payment_source || 'KAS_KASIR',
+    logged_by: item.loggedBy || item.logged_by || 'Kasir',
+    notes: item.notes?.trim() || '',
+  };
+};
 
 export const expenseService = {
   /**
    * Mengambil semua pengeluaran dari Supabase (terbaru di atas)
    */
   async getAll() {
+    const storeId = storeService.getActiveStoreId();
+    const storageKey = getStorageKey();
+
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('expenses')
         .select('*')
+        .eq('store_id', storeId)
         .order('timestamp', { ascending: false });
 
-      if (error) throw error;
+      if (error && (error.message?.includes('store_id') || error.code === '42703')) {
+        if (storeId === DEFAULT_STORE_ID) {
+          const retry = await supabase
+            .from('expenses')
+            .select('*')
+            .order('timestamp', { ascending: false });
+          if (!retry.error) {
+            data = retry.data;
+            error = null;
+          }
+        }
+      }
 
-      if (data && Array.isArray(data)) {
-        const mapped = data.map(mapFromDB);
-        storageService.set(STORAGE_KEY, mapped);
-        return mapped;
+      if (!error && Array.isArray(data)) {
+        if (data.length > 0) {
+          const mapped = data.map(mapFromDB);
+          storageService.set(storageKey, mapped);
+          return mapped;
+        }
+        if (storeId !== DEFAULT_STORE_ID) {
+          const cached = storageService.get(storageKey, []);
+          return cached.map(mapFromDB);
+        }
       }
     } catch (err) {
       console.warn('[expenseService] Gagal load dari Supabase, memakai cache lokal:', err.message);
     }
 
-    let expenses = storageService.get(STORAGE_KEY);
-    if (!expenses || !Array.isArray(expenses) || expenses.length === 0) {
-      expenses = INITIAL_EXPENSES;
-      storageService.set(STORAGE_KEY, expenses);
+    let expenses = storageService.get(storageKey);
+    if (!expenses || !Array.isArray(expenses)) {
+      expenses = storeId === DEFAULT_STORE_ID ? INITIAL_EXPENSES : [];
+      storageService.set(storageKey, expenses);
     }
     return expenses.map(mapFromDB).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   },
@@ -111,8 +143,11 @@ export const expenseService = {
    * Catat pengeluaran baru ke Supabase & cache
    */
   async create(data) {
+    const storeId = storeService.getActiveStoreId();
     const newExpense = {
       id: `exp-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      storeId: storeId,
+      store_id: storeId,
       timestamp: data.timestamp || new Date().toISOString(),
       title: data.title?.trim() || 'Pengeluaran Tanpa Nama',
       category: data.category || 'LAINNYA',
@@ -125,14 +160,21 @@ export const expenseService = {
 
     try {
       const { error } = await supabase.from('expenses').insert([dbPayload]);
-      if (error) console.warn('[expenseService] create error di Supabase:', error);
+      if (error) {
+        if (error.message?.includes('store_id')) {
+          const { store_id, ...withoutStore } = dbPayload;
+          await supabase.from('expenses').insert([withoutStore]);
+        } else {
+          console.warn('[expenseService] create error di Supabase:', error);
+        }
+      }
     } catch (err) {
       console.warn('[expenseService] create error:', err);
     }
 
     const list = await this.getAll();
     const updated = [newExpense, ...list.filter((x) => x.id !== newExpense.id)];
-    storageService.set(STORAGE_KEY, updated);
+    storageService.set(getStorageKey(), updated);
     return newExpense;
   },
 
@@ -160,13 +202,20 @@ export const expenseService = {
         .update(dbPayload)
         .eq('id', id);
 
-      if (error) console.warn('[expenseService] update error di Supabase:', error);
+      if (error) {
+        if (error.message?.includes('store_id')) {
+          const { store_id, ...withoutStore } = dbPayload;
+          await supabase.from('expenses').update(withoutStore).eq('id', id);
+        } else {
+          console.warn('[expenseService] update error di Supabase:', error);
+        }
+      }
     } catch (err) {
       console.warn('[expenseService] update error:', err);
     }
 
     list[index] = updatedExpense;
-    storageService.set(STORAGE_KEY, list);
+    storageService.set(getStorageKey(), list);
     return updatedExpense;
   },
 
@@ -187,7 +236,7 @@ export const expenseService = {
 
     const list = await this.getAll();
     const filtered = list.filter((item) => item.id !== id);
-    storageService.set(STORAGE_KEY, filtered);
+    storageService.set(getStorageKey(), filtered);
     return true;
   },
 
@@ -242,7 +291,8 @@ export const expenseService = {
    * Reset data demo
    */
   async reset() {
-    storageService.set(STORAGE_KEY, INITIAL_EXPENSES);
+    const storageKey = getStorageKey();
+    storageService.set(storageKey, INITIAL_EXPENSES);
     return INITIAL_EXPENSES;
   },
 };

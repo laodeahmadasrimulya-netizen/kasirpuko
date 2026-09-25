@@ -1,20 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   User,
   ArrowRight,
   AlertCircle,
-  KeyRound,
-  CheckCircle2,
   Lock,
   Eye,
   EyeOff,
   Mail,
   RefreshCw,
-  ArrowLeft,
   Sparkles,
-  ShieldCheck,
   Phone,
+  CheckCircle2,
   X,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -26,14 +23,13 @@ export const LoginPage = () => {
     isAuthenticated,
     login,
     signUpWithEmail,
-    verifyEmailOtp,
-    resendOtp,
     findUserByPhone,
     resetPasswordWithPhone,
   } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // If authenticated (e.g. from clicking confirmation link in Gmail), redirect automatically
+  // If already authenticated, redirect automatically
   useEffect(() => {
     if (isAuthenticated && user) {
       const redirectPath = user.role === 'ADMIN' ? '/dashboard' : '/kasir';
@@ -41,11 +37,20 @@ export const LoginPage = () => {
     }
   }, [isAuthenticated, user, navigate]);
 
-  // Mode: 'LOGIN' | 'REGISTER' | 'VERIFY_OTP'
+  // Sync email passed from VerifyEmail or registration
+  useEffect(() => {
+    if (location.state?.email) {
+      setLoginIdentifier(location.state.email);
+    }
+  }, [location.state]);
+
+  // Mode: 'LOGIN' | 'REGISTER'
   const [mode, setMode] = useState('LOGIN');
 
   // Form states - Login
-  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [loginIdentifier, setLoginIdentifier] = useState(
+    location.state?.email || sessionStorage.getItem('puko_verify_email') || ''
+  );
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
 
@@ -55,11 +60,6 @@ export const LoginPage = () => {
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
-
-  // Form states - OTP Verification
-  const [otpCode, setOtpCode] = useState('');
-  const [targetEmail, setTargetEmail] = useState('');
-  const [resendCooldown, setResendCooldown] = useState(0);
 
   // UI status
   const [error, setError] = useState('');
@@ -73,15 +73,6 @@ export const LoginPage = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [recoveryError, setRecoveryError] = useState('');
-
-  // Handle countdown for resend OTP
-  useEffect(() => {
-    let timer;
-    if (resendCooldown > 0) {
-      timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
-    }
-    return () => clearTimeout(timer);
-  }, [resendCooldown]);
 
   // Switch mode helper
   const switchMode = (newMode) => {
@@ -106,9 +97,10 @@ export const LoginPage = () => {
         navigate(redirectPath, { replace: true });
       } else {
         if (result.code === 'EMAIL_NOT_CONFIRMED') {
-          setTargetEmail(result.email || loginIdentifier);
-          setMode('VERIFY_OTP');
-          setSuccessMessage(result.message);
+          // Redirect immediately to /verify-email
+          navigate('/verify-email', {
+            state: { email: result.email || loginIdentifier },
+          });
         } else {
           setError(result.message);
         }
@@ -142,62 +134,17 @@ export const LoginPage = () => {
       const result = await signUpWithEmail(regName, regEmail, regPassword);
 
       if (result.needsConfirmation) {
-        setTargetEmail(result.email);
-        setMode('VERIFY_OTP');
-        setResendCooldown(45);
-        setSuccessMessage(
-          `Kode konfirmasi 6-digit telah dikirim ke ${result.email}. Silakan cek kotak masuk Gmail Anda.`
-        );
+        // Redirect directly to /verify-email page with email state
+        navigate('/verify-email', {
+          state: { email: result.email },
+        });
       } else {
-        // Direct login if confirmation was not required
+        // Direct login if confirmation was disabled in Supabase
         playSuccessSound();
         navigate('/dashboard', { replace: true });
       }
     } catch (err) {
       setError(err.message || 'Pendaftaran gagal. Pastikan email Anda valid.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 3. Submit OTP VERIFICATION
-  const handleVerifyOtpSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccessMessage('');
-    setIsLoading(true);
-
-    try {
-      const cleanToken = otpCode.trim().replace(/\s+/g, '');
-      const result = await verifyEmailOtp(targetEmail, cleanToken);
-
-      if (result.success) {
-        playSuccessSound();
-        setSuccessMessage('Email berhasil dikonfirmasi! Mengalihkan ke sistem...');
-        setTimeout(() => {
-          navigate('/dashboard', { replace: true });
-        }, 800);
-      }
-    } catch (err) {
-      setError(err.message || 'Kode konfirmasi salah atau kadaluarsa. Silakan periksa kembali.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 4. Resend OTP
-  const handleResendOtp = async () => {
-    if (resendCooldown > 0) return;
-    setError('');
-    setSuccessMessage('');
-    setIsLoading(true);
-
-    try {
-      await resendOtp(targetEmail);
-      setResendCooldown(60);
-      setSuccessMessage(`Kode baru telah dikirim ulang ke ${targetEmail}.`);
-    } catch (err) {
-      setError(err.message || 'Gagal mengirim ulang kode. Silakan coba lagi.');
     } finally {
       setIsLoading(false);
     }
@@ -296,25 +243,22 @@ export const LoginPage = () => {
                 <h2 className="text-lg font-black text-slate-800 tracking-tight">
                   Masuk ke Aplikasi
                 </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Masukkan email atau username Anda untuk melanjutkan
-                </p>
               </div>
 
               <form onSubmit={handleLoginSubmit} className="space-y-3.5">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Email atau Username
+                    Nama
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                      <Mail className="w-4 h-4" />
+                      <User className="w-4 h-4" />
                     </div>
                     <input
                       type="text"
                       value={loginIdentifier}
                       onChange={(e) => setLoginIdentifier(e.target.value)}
-                      placeholder="contoh: alpukatkocokpuko@gmail.com"
+                      placeholder="Masukkan nama, email, atau no. telepon"
                       required
                       className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white transition-all font-sans"
                     />
@@ -324,14 +268,14 @@ export const LoginPage = () => {
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Kata Sandi
+                      Password
                     </label>
                     <button
                       type="button"
                       onClick={() => setIsForgotModalOpen(true)}
                       className="text-xs text-puko-700 hover:text-puko-800 font-bold hover:underline cursor-pointer"
                     >
-                      Lupa Sandi?
+                      Lupa Password?
                     </button>
                   </div>
                   <div className="relative">
@@ -342,7 +286,7 @@ export const LoginPage = () => {
                       type={showLoginPassword ? 'text' : 'password'}
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
-                      placeholder="Masukkan kata sandi"
+                      placeholder="Masukkan password"
                       required
                       className={`w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-10 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white transition-all font-mono ${
                         showLoginPassword ? 'tracking-normal font-bold' : 'tracking-widest font-bold'
@@ -403,13 +347,6 @@ export const LoginPage = () => {
                 <p className="text-xs text-slate-500 mt-0.5">
                   Daftarkan email Anda untuk mengelola kasir & toko PUKO
                 </p>
-              </div>
-
-              <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-2xl text-[11px] text-amber-900 flex items-start gap-2">
-                <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <span>
-                  Kode konfirmasi 6-digit akan dikirimkan ke akun Gmail Anda untuk verifikasi identitas.
-                </span>
               </div>
 
               <form onSubmit={handleRegisterSubmit} className="space-y-3">
@@ -507,7 +444,7 @@ export const LoginPage = () => {
                     <RefreshCw className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
-                      <span>Daftar & Kirim Kode Konfirmasi</span>
+                      <span>Daftar & Kirim Kode OTP</span>
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}
@@ -526,115 +463,6 @@ export const LoginPage = () => {
                     Masuk di sini
                   </button>
                 </p>
-              </div>
-            </div>
-          )}
-
-          {/* ============================================================== */}
-          {/* 3. OTP VERIFICATION FORM                                       */}
-          {/* ============================================================== */}
-          {mode === 'VERIFY_OTP' && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => switchMode('REGISTER')}
-                  className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
-                  title="Kembali"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                </button>
-                <div>
-                  <h2 className="text-lg font-black text-slate-800 tracking-tight">
-                    Verifikasi Kode Email
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Masukkan kode 6-digit yang dikirimkan ke Gmail Anda
-                  </p>
-                </div>
-              </div>
-
-              {/* Target Email Badge */}
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-950 flex items-center gap-2.5">
-                <Mail className="w-4 h-4 text-emerald-600 shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <span className="text-[10px] text-emerald-700 uppercase font-bold tracking-wider block">
-                    Kode dikirim ke:
-                  </span>
-                  <span className="font-bold text-xs truncate block font-sans">
-                    {targetEmail}
-                  </span>
-                </div>
-              </div>
-
-              <form onSubmit={handleVerifyOtpSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 text-center">
-                    Kode Konfirmasi (6 Digit)
-                  </label>
-                  <div className="relative max-w-[240px] mx-auto">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                      <KeyRound className="w-4 h-4" />
-                    </div>
-                    <input
-                      type="text"
-                      maxLength={8}
-                      autoFocus
-                      value={otpCode}
-                      onChange={(e) => setOtpCode(e.target.value)}
-                      placeholder="123456"
-                      required
-                      className="w-full bg-slate-50 border-2 border-puko-500 text-slate-900 text-xl font-bold tracking-[0.4em] text-center rounded-2xl pl-8 pr-4 py-3 focus:outline-none focus:ring-4 focus:ring-puko-500/20 focus:bg-white font-mono shadow-xs"
-                    />
-                  </div>
-                  <p className="text-[11px] text-slate-500 text-center mt-2 leading-relaxed">
-                    Periksa kotak masuk atau folder spam di akun Gmail Anda.<br />
-                    <span className="text-slate-400">
-                      Anda bisa memasukkan 6 digit kode di atas, <strong>atau</strong> langsung klik link konfirmasi di email Anda (sistem akan otomatis mendeteksi dan masuk).
-                    </span>
-                  </p>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full py-3 px-4 rounded-xl bg-puko-600 hover:bg-puko-700 disabled:opacity-50 text-white font-extrabold text-sm shadow-md shadow-puko-900/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  {isLoading ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Verifikasi & Masuk</span>
-                    </>
-                  )}
-                </button>
-              </form>
-
-              {/* Resend & Back controls */}
-              <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-100 text-xs">
-                <button
-                  type="button"
-                  onClick={handleResendOtp}
-                  disabled={resendCooldown > 0 || isLoading}
-                  className={`font-bold transition-colors cursor-pointer ${
-                    resendCooldown > 0
-                      ? 'text-slate-400 cursor-not-allowed'
-                      : 'text-puko-700 hover:text-puko-800 hover:underline'
-                  }`}
-                >
-                  {resendCooldown > 0
-                    ? `Kirim ulang (${resendCooldown}s)`
-                    : 'Kirim Ulang Kode'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => switchMode('LOGIN')}
-                  className="text-slate-500 hover:text-slate-800 font-semibold cursor-pointer"
-                >
-                  Kembali ke Halaman Masuk
-                </button>
               </div>
             </div>
           )}

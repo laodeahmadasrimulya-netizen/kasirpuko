@@ -220,8 +220,8 @@ export const ExpensesPage = () => {
         {/* Selector Hari & Tanggal (Scrollable seperti kereta, hari ini di kanan berbalut hijau) */}
         <div
           ref={pengeluaranScrollRef}
-          className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1.5 pt-0.5 px-0.5 scroll-smooth"
-          style={{ scrollbarWidth: 'thin' }}
+          className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1.5 pt-0.5 px-0.5 scroll-smooth no-scrollbar [&::-webkit-scrollbar]:hidden"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
           {past30Days.map((day) => {
             const isSelected = selectedDate === day.dateStr;
@@ -230,7 +230,7 @@ export const ExpensesPage = () => {
                 key={day.dateStr}
                 type="button"
                 onClick={() => setSelectedDate(day.dateStr)}
-                className={`min-w-[56px] sm:min-w-[64px] py-2 px-1 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer select-none shrink-0 text-center ${
+                className={`w-[56px] sm:w-[64px] h-[56px] sm:h-[60px] py-1.5 px-1 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer select-none shrink-0 text-center ${
                   isSelected
                     ? 'border-2 border-puko-700 bg-puko-600 text-white shadow-sm font-black scale-[1.02]'
                     : day.isToday
@@ -260,25 +260,16 @@ export const ExpensesPage = () => {
                 >
                   {day.dayNumber}
                 </span>
-                {day.isToday && (
-                  <span
-                    className={`text-[8px] px-1 py-0.2 rounded font-extrabold mt-0.5 ${
-                      isSelected ? 'bg-white/20 text-white' : 'bg-puko-600 text-white'
-                    }`}
-                  >
-                    Hari Ini
-                  </span>
-                )}
               </button>
             );
           })}
         </div>
 
-        {/* Row: Nominal di kiri, 'X transaksi' di kanan */}
+        {/* Row: Nominal di kiri (- 3.000 tanpa Rp), 'X transaksi' di kanan */}
         <div className="flex items-baseline justify-between pt-2 border-t border-slate-100">
           <div>
-            <p className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">
-              {formatIDR(selectedDayTotal)}
+            <p className="text-2xl sm:text-3xl font-bold text-rose-600 tracking-tight">
+              - {Number(selectedDayTotal || 0).toLocaleString('id-ID')}
             </p>
           </div>
           <div className="text-right">

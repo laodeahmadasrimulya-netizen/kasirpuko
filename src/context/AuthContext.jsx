@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
+import { storeService, DEFAULT_STORE_ID } from '../services/storeService';
 
 const STORAGE_KEY = 'puko_auth_user';
 const USERS_STORAGE_KEY = 'puko_users_list';
@@ -9,6 +10,8 @@ export const OWNER_EMAIL = 'alpukatkocokpuko@gmail.com';
 export const DEFAULT_USERS = [
   {
     id: 'usr-admin',
+    storeId: DEFAULT_STORE_ID,
+    store_id: DEFAULT_STORE_ID,
     username: 'admin',
     email: OWNER_EMAIL,
     pin: '1234',
@@ -21,6 +24,8 @@ export const DEFAULT_USERS = [
   },
   {
     id: 'usr-kasir',
+    storeId: DEFAULT_STORE_ID,
+    store_id: DEFAULT_STORE_ID,
     username: 'kasir',
     email: '',
     pin: '0000',
@@ -46,7 +51,7 @@ export const USERS = DEFAULT_USERS;
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  // List of all accounts (Admin & Cashiers)
+  // List of all accounts (Admin & Cashiers across stores)
   const [users, setUsers] = useState(() => {
     try {
       const saved = localStorage.getItem(USERS_STORAGE_KEY);
@@ -68,6 +73,9 @@ export const AuthProvider = ({ children }) => {
             }
             if (updated.avatar === '👑') {
               updated = { ...updated, avatar: '🥑' };
+            }
+            if (!updated.storeId && !updated.store_id) {
+              updated = { ...updated, storeId: DEFAULT_STORE_ID, store_id: DEFAULT_STORE_ID };
             }
             return updated;
           });
@@ -99,6 +107,9 @@ export const AuthProvider = ({ children }) => {
         if (parsed?.avatar === '👑') {
           parsed = { ...parsed, avatar: '🥑' };
         }
+        if (!parsed?.storeId && !parsed?.store_id) {
+          parsed = { ...parsed, storeId: DEFAULT_STORE_ID, store_id: DEFAULT_STORE_ID };
+        }
         return parsed;
       }
       return null;
@@ -114,46 +125,129 @@ export const AuthProvider = ({ children }) => {
       .select('*')
       .then(({ data, error }) => {
         if (!error && Array.isArray(data) && data.length > 0) {
-          const mapped = data.map((u) => ({
-            id: u.id,
-            username: u.username,
-            email: u.email || (u.role === 'ADMIN' ? OWNER_EMAIL : ''),
-            pin: u.pin,
-            name: u.name,
-            role: u.role || 'KASIR',
-            phone: u.phone || '',
-            avatar: u.avatar || '🥑',
-            roleLabel: u.role === 'ADMIN' ? 'Admin / Owner' : 'Kasir Outlet',
-            roleBadgeColor:
-              u.role === 'ADMIN'
-                ? 'bg-amber-400/20 text-amber-300 border-amber-400/30'
-                : 'bg-emerald-400/20 text-emerald-300 border-emerald-400/30',
-          }));
+          const mapped = data.map((u) => {
+            let email = u.email || (u.id === 'usr-admin' ? OWNER_EMAIL : '');
+            let avatar = u.avatar || '🥑';
+            if (u.avatar && u.avatar.includes('|email:')) {
+              const parts = u.avatar.split('|email:');
+              avatar = parts[0] || '🥑';
+              email = parts[1] || email;
+            }
+            const sId = u.store_id || (u.id === 'usr-admin' || email === OWNER_EMAIL ? DEFAULT_STORE_ID : DEFAULT_STORE_ID);
+            return {
+              id: u.id,
+              store_id: sId,
+              storeId: sId,
+              username: u.username,
+              email: email,
+              pin: u.pin,
+              name: u.name,
+              role: u.role || 'KASIR',
+              phone: u.phone || '',
+              avatar: avatar,
+              roleLabel: u.role === 'ADMIN' ? 'Admin / Owner' : 'Kasir Outlet',
+              roleBadgeColor:
+                u.role === 'ADMIN'
+                  ? 'bg-amber-400/20 text-amber-300 border-amber-400/30'
+                  : 'bg-emerald-400/20 text-emerald-300 border-emerald-400/30',
+            };
+          });
           setUsers(mapped);
         }
       });
   }, []);
 
+  // Helper to sync and set active user from Supabase session
+  const syncSessionUser = async (authUser) => {
+    if (!authUser) {
+      setUser(null);
+      return;
+    }
+
+    const matched = users.find(
+      (u) =>
+        u.id === authUser.id ||
+        (u.email && u.email.toLowerCase() === authUser.email?.toLowerCase())
+    );
+
+    const isPrimaryOwner =
+      authUser.id === 'usr-admin' ||
+      authUser.email?.toLowerCase() === OWNER_EMAIL.toLowerCase();
+
+    let storeId = DEFAULT_STORE_ID;
+    if (!isPrimaryOwner) {
+      const store = await storeService.getOrCreateStoreForOwner(
+        authUser.id,
+        authUser.email,
+        authUser.user_metadata?.name || matched?.name
+      );
+      storeId = store.id;
+    }
+    storeService.setActiveStoreId(storeId);
+
+    const resolvedName =
+      authUser.user_metadata?.name ||
+      matched?.name ||
+      (isPrimaryOwner ? 'Owner' : authUser.email?.split('@')[0] || 'Pengguna');
+
+    const activeUser = {
+      id: authUser.id,
+      email: authUser.email,
+      name: resolvedName,
+      role: authUser.user_metadata?.role || matched?.role || 'ADMIN',
+      username: matched?.username || authUser.email?.split('@')[0],
+      phone: matched?.phone || authUser.user_metadata?.phone || '',
+      avatar: matched?.avatar || '🥑',
+      storeId: storeId,
+      store_id: storeId,
+      roleLabel: 'Admin / Owner',
+      roleBadgeColor: 'bg-amber-400/20 text-amber-300 border-amber-400/30',
+    };
+    setUser(activeUser);
+
+    // Ensure the active user exists in users state
+    setUsers((prev) => {
+      const exists = prev.some(
+        (u) =>
+          u.id === authUser.id ||
+          (u.email && u.email.toLowerCase() === authUser.email?.toLowerCase())
+      );
+      if (exists) {
+        return prev.map((u) => {
+          if (
+            u.id === authUser.id ||
+            (u.email && u.email.toLowerCase() === authUser.email?.toLowerCase())
+          ) {
+            return { ...u, name: resolvedName, email: authUser.email, storeId, store_id: storeId };
+          }
+          return u;
+        });
+      }
+      return [
+        ...prev,
+        {
+          id: authUser.id,
+          storeId: storeId,
+          store_id: storeId,
+          username: activeUser.username,
+          email: authUser.email,
+          pin: '1234',
+          name: activeUser.name,
+          role: 'ADMIN',
+          phone: activeUser.phone,
+          avatar: '🥑',
+          roleLabel: 'Admin / Owner',
+          roleBadgeColor: 'bg-amber-400/20 text-amber-300 border-amber-400/30',
+        },
+      ];
+    });
+  };
+
   // Listen to Supabase Auth state changes
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        const authUser = session.user;
-        const matched = users.find(
-          (u) => u.email?.toLowerCase() === authUser.email?.toLowerCase()
-        );
-        const activeUser = {
-          id: authUser.id,
-          email: authUser.email,
-          name: authUser.user_metadata?.name || matched?.name || 'Owner',
-          role: authUser.user_metadata?.role || matched?.role || 'ADMIN',
-          username: matched?.username || authUser.email?.split('@')[0],
-          phone: authUser.user_metadata?.phone || matched?.phone || '',
-          avatar: '🥑',
-          roleLabel: 'Admin / Owner',
-          roleBadgeColor: 'bg-amber-400/20 text-amber-300 border-amber-400/30',
-        };
-        setUser(activeUser);
+        syncSessionUser(session.user);
       }
     });
 
@@ -161,23 +255,9 @@ export const AuthProvider = ({ children }) => {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
-        const authUser = session.user;
-        const matched = users.find(
-          (u) => u.email?.toLowerCase() === authUser.email?.toLowerCase()
-        );
-        const activeUser = {
-          id: authUser.id,
-          email: authUser.email,
-          name: authUser.user_metadata?.name || matched?.name || 'Owner',
-          role: authUser.user_metadata?.role || matched?.role || 'ADMIN',
-          username: matched?.username || authUser.email?.split('@')[0],
-          phone: authUser.user_metadata?.phone || matched?.phone || '',
-          avatar: '🥑',
-          roleLabel: 'Admin / Owner',
-          roleBadgeColor: 'bg-amber-400/20 text-amber-300 border-amber-400/30',
-        };
-        setUser(activeUser);
+        syncSessionUser(session.user);
       } else if (event === 'SIGNED_OUT') {
+        storeService.setActiveStoreId(DEFAULT_STORE_ID);
         setUser(null);
       }
     });
@@ -185,7 +265,7 @@ export const AuthProvider = ({ children }) => {
     return () => {
       subscription?.unsubscribe();
     };
-  }, [users]);
+  }, []);
 
   // Sync users list to localStorage
   useEffect(() => {
@@ -203,15 +283,15 @@ export const AuthProvider = ({ children }) => {
 
   /**
    * Login with Email or Username and Password / PIN
-   * Supports Supabase Auth (Email + Password) and Local/Database Users (Username + PIN)
+   * Multi-tenant aware: Automatically sets the active store for the authenticated user
    */
   const login = async (identifier, secret) => {
     const trimmedId = (identifier || '').trim();
-    const normalizedIdPhone = normalizePhone(identifier);
+    const normalizedIdPhone = normalizePhone(trimmedId);
     const trimmedSecret = (secret || '').trim();
 
     if (!trimmedId) {
-      return { success: false, message: 'Email atau username wajib diisi.' };
+      return { success: false, message: 'Email, Nama, Username, atau Nomor Telepon wajib diisi.' };
     }
     if (!trimmedSecret) {
       return { success: false, message: 'Password / sandi wajib diisi.' };
@@ -219,7 +299,7 @@ export const AuthProvider = ({ children }) => {
 
     const isEmail = trimmedId.includes('@');
 
-    // 1. If it's an email, attempt Supabase Auth first
+    // 1. If it's an email, attempt Supabase Auth first (for Owner)
     if (isEmail) {
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -229,20 +309,82 @@ export const AuthProvider = ({ children }) => {
 
         if (!error && data.user) {
           const matched = users.find(
-            (u) => u.email?.toLowerCase() === data.user.email?.toLowerCase()
+            (u) =>
+              u.id === data.user.id ||
+              u.email?.toLowerCase() === data.user.email?.toLowerCase()
           );
+
+          const isPrimaryOwner =
+            data.user.id === 'usr-admin' ||
+            data.user.email?.toLowerCase() === OWNER_EMAIL.toLowerCase();
+
+          let storeId = DEFAULT_STORE_ID;
+          if (!isPrimaryOwner) {
+            const store = await storeService.getOrCreateStoreForOwner(
+              data.user.id,
+              data.user.email,
+              data.user.user_metadata?.name || matched?.name
+            );
+            storeId = store.id;
+          }
+          storeService.setActiveStoreId(storeId);
+
+          const resolvedName =
+            data.user.user_metadata?.name ||
+            matched?.name ||
+            (isPrimaryOwner ? 'Owner' : data.user.email?.split('@')[0] || 'Pengguna');
+
           const activeUser = {
             id: data.user.id,
             email: data.user.email,
-            name: data.user.user_metadata?.name || matched?.name || 'Owner',
+            name: resolvedName,
             role: data.user.user_metadata?.role || matched?.role || 'ADMIN',
             username: matched?.username || data.user.email?.split('@')[0],
-            phone: data.user.user_metadata?.phone || matched?.phone || '',
-            avatar: '🥑',
+            phone: matched?.phone || data.user.user_metadata?.phone || '',
+            avatar: matched?.avatar || '🥑',
+            storeId: storeId,
+            store_id: storeId,
             roleLabel: 'Admin / Owner',
             roleBadgeColor: 'bg-amber-400/20 text-amber-300 border-amber-400/30',
           };
           setUser(activeUser);
+
+          setUsers((prev) => {
+            const exists = prev.some(
+              (u) =>
+                u.id === data.user.id ||
+                (u.email && u.email.toLowerCase() === data.user.email?.toLowerCase())
+            );
+            if (exists) {
+              return prev.map((u) => {
+                if (
+                  u.id === data.user.id ||
+                  (u.email && u.email.toLowerCase() === data.user.email?.toLowerCase())
+                ) {
+                  return { ...u, name: resolvedName, email: data.user.email, storeId, store_id: storeId };
+                }
+                return u;
+              });
+            }
+            return [
+              ...prev,
+              {
+                id: data.user.id,
+                storeId: storeId,
+                store_id: storeId,
+                username: activeUser.username,
+                email: data.user.email,
+                pin: trimmedSecret.slice(0, 6) || '1234',
+                name: activeUser.name,
+                role: 'ADMIN',
+                phone: activeUser.phone,
+                avatar: '🥑',
+                roleLabel: 'Admin / Owner',
+                roleBadgeColor: 'bg-amber-400/20 text-amber-300 border-amber-400/30',
+              },
+            ];
+          });
+
           return { success: true, user: activeUser };
         }
 
@@ -261,7 +403,7 @@ export const AuthProvider = ({ children }) => {
       }
     }
 
-    // 2. Check local/database users list (for Cashiers or fallback Owner)
+    // 2. Check local/database users list (Supports Name, Username, Phone, and Email for both Admin and Kasir)
     let storePhone = '';
     try {
       const savedSettings = localStorage.getItem('puko_settings');
@@ -276,6 +418,7 @@ export const AuthProvider = ({ children }) => {
       const uPhone = normalizePhone(u.phone);
       const uEmail = (u.email || (u.role === 'ADMIN' ? OWNER_EMAIL : '')).toLowerCase();
       const uUsername = (u.username || '').toLowerCase();
+      const uName = (u.name || '').toLowerCase();
 
       const phoneMatched =
         Boolean(normalizedIdPhone) &&
@@ -283,29 +426,94 @@ export const AuthProvider = ({ children }) => {
 
       const idMatched =
         uUsername === trimmedId.toLowerCase() ||
-        uEmail === trimmedId.toLowerCase() ||
+        uName === trimmedId.toLowerCase() ||
+        (uEmail && uEmail === trimmedId.toLowerCase()) ||
         phoneMatched;
 
-      if (!idMatched) return false;
-      return u.pin === trimmedSecret;
+      return idMatched;
     };
 
     const found = users.find(isMatch);
 
     if (found) {
-      setUser(found);
-      return { success: true, user: found };
+      const userStoreId = found.storeId || found.store_id || (found.id === 'usr-admin' || (found.role === 'ADMIN' && found.email === OWNER_EMAIL) ? DEFAULT_STORE_ID : DEFAULT_STORE_ID);
+      storeService.setActiveStoreId(userStoreId);
+
+      // If it's ADMIN:
+      if (found.role === 'ADMIN') {
+        // Try authenticating with Supabase Auth using Owner's email
+        try {
+          const authAttempt = await supabase.auth.signInWithPassword({
+            email: found.email || OWNER_EMAIL,
+            password: trimmedSecret,
+          });
+          if (!authAttempt.error && authAttempt.data.user) {
+            let storeId = userStoreId;
+            if (found.email && found.email.toLowerCase() !== OWNER_EMAIL.toLowerCase()) {
+              const store = await storeService.getOrCreateStoreForOwner(
+                authAttempt.data.user.id,
+                authAttempt.data.user.email,
+                found.name
+              );
+              storeId = store.id;
+            }
+            storeService.setActiveStoreId(storeId);
+
+            const activeUser = {
+              id: authAttempt.data.user.id,
+              email: authAttempt.data.user.email,
+              name: found.name || 'Owner',
+              role: 'ADMIN',
+              username: found.username || 'admin',
+              phone: found.phone || '',
+              avatar: '🥑',
+              storeId: storeId,
+              store_id: storeId,
+              roleLabel: 'Admin / Owner',
+              roleBadgeColor: 'bg-amber-400/20 text-amber-300 border-amber-400/30',
+            };
+            setUser(activeUser);
+            return { success: true, user: activeUser };
+          }
+        } catch (e) {
+          // ignore fallback
+        }
+
+        // Check fallback PIN/password
+        if (found.pin === trimmedSecret) {
+          const activeUser = { ...found, storeId: userStoreId, store_id: userStoreId };
+          setUser(activeUser);
+          return { success: true, user: activeUser };
+        }
+
+        return {
+          success: false,
+          message: 'Password akun Owner salah. Periksa kembali password Anda.',
+        };
+      }
+
+      // If it's KASIR:
+      if (found.pin === trimmedSecret) {
+        const activeUser = { ...found, storeId: userStoreId, store_id: userStoreId };
+        setUser(activeUser);
+        return { success: true, user: activeUser };
+      }
+
+      return {
+        success: false,
+        message: 'PIN / Sandi Kasir salah. Periksa kembali sandi Anda.',
+      };
     }
 
     return {
       success: false,
-      message: 'Email/Username atau Kata Sandi salah. Periksa kembali data login Anda.',
+      message: 'Akun tidak ditemukan. Periksa kembali Email, Nama, Username, atau Nomor Telepon Anda.',
     };
   };
 
   /**
    * Register a new Owner account via Supabase Auth
-   * Automatically sends a 6-digit confirmation code to Gmail
+   * Multi-tenant: Creates a dedicated store for the new owner!
    */
   const signUpWithEmail = async (name, email, password) => {
     const cleanEmail = (email || '').trim().toLowerCase();
@@ -318,13 +526,10 @@ export const AuthProvider = ({ children }) => {
       throw new Error('Kata sandi minimal 6 karakter.');
     }
 
-    const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined;
-
     const { data, error } = await supabase.auth.signUp({
       email: cleanEmail,
       password: cleanPassword,
       options: {
-        emailRedirectTo: redirectUrl,
         data: {
           name: cleanName,
           role: 'ADMIN',
@@ -334,13 +539,46 @@ export const AuthProvider = ({ children }) => {
 
     if (error) {
       if (error.message.includes('already registered')) {
-        throw new Error('Email ini sudah terdaftar. Silakan langsung masuk menggunakan email & password Anda.');
+        throw new Error('Email ini sudah terdaftar. Silakan langsung masuk menggunakan email & kata sandi Anda.');
       }
       throw error;
     }
 
+    // Check if user is already registered in Supabase
+    if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      const loginAttempt = await login(cleanEmail, cleanPassword);
+      if (loginAttempt.success) {
+        return { success: true, needsConfirmation: false, user: loginAttempt.user };
+      }
+
+      if (loginAttempt.code === 'EMAIL_NOT_CONFIRMED') {
+        await supabase.auth.resend({ type: 'signup', email: cleanEmail });
+        return {
+          success: true,
+          needsConfirmation: true,
+          email: cleanEmail,
+          user: data.user,
+        };
+      }
+
+      throw new Error(
+        'Email ini sudah terdaftar dan terkonfirmasi di PUKO POS. Silakan langsung masuk melalui form "Masuk Akun" dengan email dan kata sandi Anda.'
+      );
+    }
+
+    // Save pending email in sessionStorage for VerifyEmail page
+    try {
+      sessionStorage.setItem('puko_verify_email', cleanEmail);
+    } catch {
+      // ignore
+    }
+
     // If session was created immediately (email confirmation disabled in Supabase)
     if (data.session) {
+      const newStore = await storeService.createStoreForOwner(data.user.id, cleanEmail, cleanName);
+      const storeId = newStore.id;
+      storeService.setActiveStoreId(storeId);
+
       const activeUser = {
         id: data.user.id,
         email: data.user.email,
@@ -348,10 +586,64 @@ export const AuthProvider = ({ children }) => {
         role: 'ADMIN',
         username: cleanEmail.split('@')[0],
         avatar: '🥑',
+        storeId: storeId,
+        store_id: storeId,
         roleLabel: 'Admin / Owner',
         roleBadgeColor: 'bg-amber-400/20 text-amber-300 border-amber-400/30',
       };
       setUser(activeUser);
+
+      setUsers((prev) => {
+        const filtered = prev.filter(
+          (u) => u.id !== data.user.id && u.email?.toLowerCase() !== cleanEmail
+        );
+        return [
+          ...filtered,
+          {
+            id: data.user.id,
+            storeId: storeId,
+            store_id: storeId,
+            username: cleanEmail.split('@')[0],
+            name: cleanName,
+            email: cleanEmail,
+            role: 'ADMIN',
+            pin: cleanPassword.slice(0, 6) || '1234',
+            phone: '',
+            avatar: '🥑',
+            roleLabel: 'Admin / Owner',
+            roleBadgeColor: 'bg-amber-400/20 text-amber-300 border-amber-400/30',
+          },
+        ];
+      });
+
+      try {
+        supabase
+          .from('users')
+          .upsert({
+            id: data.user.id,
+            store_id: storeId,
+            username: cleanEmail.split('@')[0],
+            name: cleanName,
+            role: 'ADMIN',
+            avatar: `🥑|email:${cleanEmail}`,
+            pin: cleanPassword.slice(0, 6) || '1234',
+          })
+          .then(({ error: upsertErr }) => {
+            if (upsertErr && upsertErr.message?.includes('store_id')) {
+              supabase.from('users').upsert({
+                id: data.user.id,
+                username: cleanEmail.split('@')[0],
+                name: cleanName,
+                role: 'ADMIN',
+                avatar: `🥑|email:${cleanEmail}`,
+                pin: cleanPassword.slice(0, 6) || '1234',
+              }).then(() => {});
+            }
+          });
+      } catch (e) {
+        // ignore
+      }
+
       return { success: true, needsConfirmation: false, user: activeUser };
     }
 
@@ -364,14 +656,19 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
-   * Verify 6-digit confirmation code from Gmail
+   * Verify 6-digit OTP confirmation code from Gmail
+   * Automatically initializes the Owner's dedicated store
    */
   const verifyEmailOtp = async (email, token) => {
     const cleanEmail = (email || '').trim().toLowerCase();
     const cleanToken = (token || '').trim();
 
     if (!cleanToken) {
-      throw new Error('Kode konfirmasi 6-digit wajib diisi.');
+      throw new Error('Kode OTP 6 digit wajib diisi.');
+    }
+
+    if (cleanToken.length !== 6 || !/^\d{6}$/.test(cleanToken)) {
+      throw new Error('Kode OTP harus terdiri dari 6 digit angka.');
     }
 
     let { data, error } = await supabase.auth.verifyOtp({
@@ -381,49 +678,116 @@ export const AuthProvider = ({ children }) => {
     });
 
     if (error) {
-      // Fallback to 'email' type if 'signup' fails
       const retry = await supabase.auth.verifyOtp({
         email: cleanEmail,
         token: cleanToken,
         type: 'email',
       });
       if (retry.error) {
-        throw new Error('Kode konfirmasi tidak valid atau sudah kadaluarsa. Periksa kembali kode di Gmail Anda.');
+        throw new Error('Kode OTP salah atau sudah kadaluarsa. Pastikan 6 digit kode sesuai dengan yang masuk di Gmail Anda.');
       }
       data = retry.data;
     }
 
     if (data?.user) {
+      const isPrimaryOwner =
+        data.user.id === 'usr-admin' ||
+        cleanEmail.toLowerCase() === OWNER_EMAIL.toLowerCase();
+
+      let storeId = DEFAULT_STORE_ID;
+      if (!isPrimaryOwner) {
+        const store = await storeService.getOrCreateStoreForOwner(
+          data.user.id,
+          cleanEmail,
+          data.user.user_metadata?.name || cleanEmail.split('@')[0]
+        );
+        storeId = store.id;
+      }
+      storeService.setActiveStoreId(storeId);
+
+      const resolvedName =
+        data.user.user_metadata?.name ||
+        cleanEmail.split('@')[0] ||
+        'Owner';
+
       const activeUser = {
         id: data.user.id,
         email: data.user.email,
-        name: data.user.user_metadata?.name || 'Owner',
+        name: resolvedName,
         role: 'ADMIN',
         username: cleanEmail.split('@')[0],
         avatar: '🥑',
+        storeId: storeId,
+        store_id: storeId,
         roleLabel: 'Admin / Owner',
         roleBadgeColor: 'bg-amber-400/20 text-amber-300 border-amber-400/30',
       };
       setUser(activeUser);
 
+      // Add or update in users state
+      setUsers((prev) => {
+        const filtered = prev.filter(
+          (u) => u.id !== data.user.id && u.email?.toLowerCase() !== cleanEmail
+        );
+        return [
+          ...filtered,
+          {
+            id: data.user.id,
+            storeId: storeId,
+            store_id: storeId,
+            username: cleanEmail.split('@')[0],
+            name: resolvedName,
+            email: cleanEmail,
+            role: 'ADMIN',
+            pin: '1234',
+            phone: '',
+            avatar: '🥑',
+            roleLabel: 'Admin / Owner',
+            roleBadgeColor: 'bg-amber-400/20 text-amber-300 border-amber-400/30',
+          },
+        ];
+      });
+
+      // Remove pending email
+      try {
+        sessionStorage.removeItem('puko_verify_email');
+      } catch {
+        // ignore
+      }
+
       // Upsert into public.users table in background
       try {
-        supabase.from('users').upsert({
-          id: data.user.id,
-          username: cleanEmail.split('@')[0],
-          name: activeUser.name,
-          role: 'ADMIN',
-          avatar: '🥑',
-          pin: '1234',
-        }).then(() => {});
+        supabase
+          .from('users')
+          .upsert({
+            id: data.user.id,
+            store_id: storeId,
+            username: cleanEmail.split('@')[0],
+            name: resolvedName,
+            role: 'ADMIN',
+            avatar: `🥑|email:${cleanEmail}`,
+            pin: '1234',
+          })
+          .then(({ error: upsertErr }) => {
+            if (upsertErr && upsertErr.message?.includes('store_id')) {
+              supabase.from('users').upsert({
+                id: data.user.id,
+                username: cleanEmail.split('@')[0],
+                name: resolvedName,
+                role: 'ADMIN',
+                avatar: `🥑|email:${cleanEmail}`,
+                pin: '1234',
+              }).then(() => {});
+            }
+          });
       } catch (e) {
-        console.warn('Upsert public.users after verify:', e);
+        console.warn('Upsert public.users after verifyOtp:', e);
       }
 
       return { success: true, user: activeUser };
     }
 
-    throw new Error('Verifikasi gagal. Pastikan kode konfirmasi sesuai dengan yang masuk di Gmail.');
+    throw new Error('Verifikasi gagal. Pastikan kode OTP 6 digit sesuai dengan yang masuk di Gmail.');
   };
 
   /**
@@ -431,14 +795,10 @@ export const AuthProvider = ({ children }) => {
    */
   const resendOtp = async (email) => {
     const cleanEmail = (email || '').trim().toLowerCase();
-    const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined;
 
     const { error } = await supabase.auth.resend({
       type: 'signup',
       email: cleanEmail,
-      options: {
-        emailRedirectTo: redirectUrl,
-      },
     });
     if (error) {
       throw new Error(error.message || 'Gagal mengirim ulang kode. Silakan coba lagi sebentar lagi.');
@@ -447,7 +807,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
-   * Find user by registered phone number (or store phone for admin)
+   * Find user by registered phone number
    */
   const findUserByPhone = (phone) => {
     const targetPhone = normalizePhone(phone);
@@ -463,7 +823,6 @@ export const AuthProvider = ({ children }) => {
       // ignore
     }
 
-    // Check admin first if matches store phone or admin user phone
     const adminUser = users.find(
       (u) =>
         u.role === 'ADMIN' &&
@@ -517,37 +876,69 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
-   * One-click Quick Login (Admin or Kasir) for fast testing and touchscreens
+   * Cashiers and users belonging specifically to the active store
+   */
+  const activeStoreId = storeService.getActiveStoreId(user);
+  const visibleUsers = users.filter((u) => {
+    const uStore =
+      u.storeId ||
+      u.store_id ||
+      (u.id === 'usr-admin' || (u.role === 'ADMIN' && u.email?.toLowerCase() === OWNER_EMAIL.toLowerCase())
+        ? DEFAULT_STORE_ID
+        : DEFAULT_STORE_ID);
+    return uStore === activeStoreId;
+  });
+
+  /**
+   * One-click Quick Login (Admin or Kasir of current store)
    */
   const quickLogin = (roleTarget) => {
-    const target = users.find((u) => u.role === roleTarget);
+    const target = visibleUsers.find((u) => u.role === roleTarget) || users.find((u) => u.role === roleTarget);
     if (target) {
-      setUser(target);
-      return target;
+      const targetStoreId = target.storeId || target.store_id || DEFAULT_STORE_ID;
+      storeService.setActiveStoreId(targetStoreId);
+      const userWithStore = { ...target, storeId: targetStoreId, store_id: targetStoreId };
+      setUser(userWithStore);
+      return userWithStore;
     }
     return null;
   };
 
   /**
-   * Add a new cashier account (Only Cashiers can be created by Owner)
+   * Add a new cashier account for the CURRENT store
    */
-  const addUser = ({ name, username, pin, phone = '' }) => {
+  const addUser = ({ name, username, pin, phone = '', email = '' }) => {
     const cleanUsername = (username || '').trim().toLowerCase();
-    if (!cleanUsername) throw new Error('Username kasir wajib diisi');
-    if (!name || !name.trim()) throw new Error('Nama kasir wajib diisi');
-    if (!pin || !pin.trim()) throw new Error('PIN / Sandi kasir wajib diisi');
+    const cleanPhone = (phone || '').trim();
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanName = (name || '').trim();
+    const cleanPin = (pin || '').trim();
 
-    const exists = users.some((u) => u.username.toLowerCase() === cleanUsername);
+    if (!cleanName) throw new Error('Nama kasir wajib diisi');
+    if (!cleanPhone) throw new Error('Nomor telepon / WhatsApp kasir wajib diisi (utama untuk login kasir)');
+    if (!cleanUsername) throw new Error('Username kasir wajib diisi');
+    if (!cleanPin) throw new Error('PIN / Sandi kasir wajib diisi');
+
+    const exists = users.some(
+      (u) =>
+        u.username?.toLowerCase() === cleanUsername ||
+        (cleanPhone && normalizePhone(u.phone) === normalizePhone(cleanPhone)) ||
+        (cleanEmail && u.email && u.email.toLowerCase() === cleanEmail)
+    );
     if (exists) {
-      throw new Error(`Username "${cleanUsername}" sudah digunakan. Silakan gunakan username lain.`);
+      throw new Error(`Username, Nomor Telepon, atau Email sudah terdaftar pada akun lain.`);
     }
 
+    const currentStoreId = storeService.getActiveStoreId(user);
     const newUser = {
       id: `usr-${Date.now()}`,
+      store_id: currentStoreId,
+      storeId: currentStoreId,
       username: cleanUsername,
-      pin: pin.trim(),
-      name: name.trim(),
-      phone: (phone || '').trim(),
+      pin: cleanPin,
+      name: cleanName,
+      phone: cleanPhone,
+      email: cleanEmail,
       role: 'KASIR',
       avatar: '🥑',
       roleLabel: 'Kasir Outlet',
@@ -558,18 +949,36 @@ export const AuthProvider = ({ children }) => {
 
     // Simpan ke Supabase di background
     try {
+      const dbAvatar = cleanEmail ? `🥑|email:${cleanEmail}` : '🥑';
       supabase.from('users').insert([
         {
           id: newUser.id,
+          store_id: currentStoreId,
           username: newUser.username,
           pin: newUser.pin,
           name: newUser.name,
           role: newUser.role,
           phone: newUser.phone,
-          avatar: newUser.avatar,
+          avatar: dbAvatar,
         },
       ]).then(({ error }) => {
-        if (error) console.warn('[AuthContext] addUser error di Supabase:', error);
+        if (error) {
+          if (error.message?.includes('store_id')) {
+            supabase.from('users').insert([
+              {
+                id: newUser.id,
+                username: newUser.username,
+                pin: newUser.pin,
+                name: newUser.name,
+                role: newUser.role,
+                phone: newUser.phone,
+                avatar: dbAvatar,
+              },
+            ]).then(() => {});
+          } else {
+            console.warn('[AuthContext] addUser error di Supabase:', error);
+          }
+        }
       });
     } catch (err) {
       console.warn('[AuthContext] addUser error:', err);
@@ -581,29 +990,37 @@ export const AuthProvider = ({ children }) => {
   /**
    * Update cashier / user detail (name, username, pin, phone)
    */
-  const updateUser = (id, data) => {
+  const updateUser = async (id, data) => {
     const cleanUsername = data.username ? data.username.trim().toLowerCase() : undefined;
 
     if (cleanUsername) {
       const duplicate = users.some(
-        (u) => u.id !== id && u.username.toLowerCase() === cleanUsername
+        (u) => u.id !== id && u.username?.toLowerCase() === cleanUsername
       );
       if (duplicate) {
         throw new Error(`Username "${cleanUsername}" sudah digunakan oleh akun lain.`);
       }
     }
 
+    const isTargetAdmin =
+      id === 'usr-admin' ||
+      data.role === 'ADMIN' ||
+      (user && user.role === 'ADMIN' && (id === user.id || id === 'usr-admin'));
+
     let updated = null;
     setUsers((prev) =>
       prev.map((item) => {
-        if (item.id === id) {
+        const isMatch = item.id === id || (isTargetAdmin && item.role === 'ADMIN');
+        if (isMatch) {
           updated = {
             ...item,
             name: data.name ? data.name.trim() : item.name,
             username: cleanUsername || item.username,
             pin: data.pin !== undefined ? String(data.pin).trim() : item.pin,
             phone: data.phone !== undefined ? String(data.phone).trim() : item.phone,
-            email: item.role === 'ADMIN' ? (data.email || item.email || OWNER_EMAIL) : item.email,
+            email: item.role === 'ADMIN'
+              ? (data.email || item.email || OWNER_EMAIL)
+              : (data.email !== undefined ? data.email.trim().toLowerCase() : item.email),
           };
           return updated;
         }
@@ -611,26 +1028,73 @@ export const AuthProvider = ({ children }) => {
       })
     );
 
-    // Sync active session if this user is currently logged in
-    if (user && user.id === id && updated) {
-      setUser(updated);
+    // 1. Sync active session
+    const isCurrentLoggedIn = Boolean(
+      user && (user.id === id || (user.role === 'ADMIN' && isTargetAdmin))
+    );
+
+    if (isCurrentLoggedIn && updated) {
+      const activeUpdate = {
+        ...user,
+        name: updated.name,
+        username: updated.username,
+        phone: updated.phone,
+        pin: updated.pin,
+      };
+      setUser(activeUpdate);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(activeUpdate));
+      } catch {
+        // ignore
+      }
     }
 
-    // Update di Supabase di background
+    // 2. Jika target adalah Owner/Admin, update juga metadata dan password di Supabase Auth!
+    if (isTargetAdmin) {
+      try {
+        const authUpdates = {
+          data: {
+            name: data.name ? data.name.trim() : undefined,
+            phone: data.phone !== undefined ? String(data.phone).trim() : undefined,
+            username: cleanUsername || undefined,
+          },
+        };
+
+        if (data.pin && String(data.pin).trim().length >= 6) {
+          authUpdates.password = String(data.pin).trim();
+        }
+
+        const { error: authError } = await supabase.auth.updateUser(authUpdates);
+        if (authError) {
+          console.warn('[AuthContext] supabase.auth.updateUser notice:', authError.message);
+        }
+      } catch (authErr) {
+        console.warn('[AuthContext] Supabase auth update error:', authErr);
+      }
+    }
+
+    // 3. Update di public.users Supabase
     if (updated) {
       try {
-        supabase
+        const targetDbId = id;
+        const dbAvatar = updated.email && updated.role !== 'ADMIN'
+          ? `${updated.avatar || '🥑'}|email:${updated.email}`
+          : (updated.avatar || '🥑');
+
+        const { error: dbError } = await supabase
           .from('users')
           .update({
             name: updated.name,
             username: updated.username,
             pin: updated.pin,
             phone: updated.phone,
+            avatar: dbAvatar,
           })
-          .eq('id', id)
-          .then(({ error }) => {
-            if (error) console.warn('[AuthContext] updateUser error di Supabase:', error);
-          });
+          .eq('id', targetDbId);
+
+        if (dbError) {
+          console.warn('[AuthContext] updateUser error di Supabase:', dbError);
+        }
       } catch (err) {
         console.warn('[AuthContext] updateUser error:', err);
       }
@@ -680,12 +1144,15 @@ export const AuthProvider = ({ children }) => {
     } catch (e) {
       console.warn('SignOut error:', e);
     }
+    storeService.setActiveStoreId(DEFAULT_STORE_ID);
     setUser(null);
   };
 
   const value = {
     user,
-    users,
+    users: visibleUsers,
+    allUsers: users,
+    activeStoreId,
     isAuthenticated: Boolean(user),
     isAdmin: user?.role === 'ADMIN',
     isKasir: user?.role === 'KASIR',

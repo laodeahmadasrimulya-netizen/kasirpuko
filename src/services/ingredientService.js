@@ -1,14 +1,20 @@
 import { supabase } from './supabaseClient';
 import { storageService } from './storageService';
+import { storeService, DEFAULT_STORE_ID } from './storeService';
 
-const STORAGE_KEY = 'puko_ingredients_v1';
+const getStorageKey = () => {
+  const storeId = storeService.getActiveStoreId();
+  return storeId === DEFAULT_STORE_ID ? 'puko_ingredients_v1' : `puko_ingredients_${storeId}`;
+};
 
 // Sinkronisasi data bahan baku ke Supabase di latar belakang
 const syncToSupabase = async (ingredientsObj) => {
   if (!ingredientsObj || typeof ingredientsObj !== 'object') return;
+  const storeId = storeService.getActiveStoreId();
   try {
     const rows = Object.values(ingredientsObj).map((ing) => ({
-      id: String(ing.id),
+      id: storeId === DEFAULT_STORE_ID ? String(ing.id) : `${storeId}_${ing.id}`,
+      store_id: storeId,
       name: ing.name,
       category: ing.category || 'Bahan Utama',
       unit: ing.unit || 'kg',
@@ -22,7 +28,11 @@ const syncToSupabase = async (ingredientsObj) => {
       color: ing.color || 'emerald',
       updated_at: new Date().toISOString(),
     }));
-    await supabase.from('ingredients').upsert(rows);
+    const { error } = await supabase.from('ingredients').upsert(rows);
+    if (error && error.message?.includes('store_id')) {
+      const rowsWithoutStore = rows.map(({ store_id, ...rest }) => rest);
+      await supabase.from('ingredients').upsert(rowsWithoutStore);
+    }
   } catch (err) {
     console.warn('[ingredientService] syncToSupabase error:', err);
   }
@@ -101,10 +111,11 @@ export const ingredientService = {
    * Get all ingredients from storage
    */
   getAll() {
-    let rawData = storageService.get(STORAGE_KEY, null);
+    const storageKey = getStorageKey();
+    let rawData = storageService.get(storageKey, null);
 
     if (!rawData || typeof rawData !== 'object' || !rawData.alpukat || !rawData.susuUht || !rawData.skm) {
-      storageService.set(STORAGE_KEY, DEFAULT_INGREDIENTS);
+      storageService.set(storageKey, DEFAULT_INGREDIENTS);
       storageService.set('puko_baseline_v4_synced', true);
       return DEFAULT_INGREDIENTS;
     }
@@ -172,7 +183,7 @@ export const ingredientService = {
     }
 
     if (changed) {
-      storageService.set(STORAGE_KEY, data);
+      storageService.set(storageKey, data);
     }
 
     return data;
@@ -182,7 +193,7 @@ export const ingredientService = {
    * Save ingredients to storage and sync to Supabase
    */
   save(ingredients) {
-    storageService.set(STORAGE_KEY, ingredients);
+    storageService.set(getStorageKey(), ingredients);
     // Sinkronisasi otomatis ke Supabase di background
     syncToSupabase(ingredients);
     return ingredients;
@@ -192,16 +203,27 @@ export const ingredientService = {
    * Ambil stok terbaru dari Supabase
    */
   async fetchFromSupabase() {
+    const storeId = storeService.getActiveStoreId();
+    const storageKey = getStorageKey();
     try {
-      const { data, error } = await supabase.from('ingredients').select('*');
+      let { data, error } = await supabase.from('ingredients').select('*').eq('store_id', storeId);
+      if (error && (error.message?.includes('store_id') || error.code === '42703')) {
+        if (storeId === DEFAULT_STORE_ID) {
+          const retry = await supabase.from('ingredients').select('*');
+          if (!retry.error) {
+            data = retry.data;
+            error = null;
+          }
+        }
+      }
       if (!error && Array.isArray(data) && data.length > 0) {
         const current = this.getAll();
         const updated = { ...current };
         data.forEach((row) => {
-          const key = row.id;
+          const key = row.id.replace(`${storeId}_`, '');
           updated[key] = {
             ...(updated[key] || {}),
-            id: row.id,
+            id: key,
             name: row.name,
             category: row.category,
             unit: row.unit,
@@ -211,11 +233,11 @@ export const ingredientService = {
             maxStock: Number(row.max_stock || 0),
             minStockAlert: Number(row.min_stock_alert || 0),
             portionPerCup: Number(row.portion_per_cup || 0),
-            icon: row.icon || '🥑',
+            icon: row.icon || '📦',
             color: row.color || 'emerald',
           };
         });
-        storageService.set(STORAGE_KEY, updated);
+        storageService.set(storageKey, updated);
         return updated;
       }
     } catch (err) {
