@@ -18,6 +18,7 @@ import {
   Crown,
   Flame,
   Award,
+  X,
 } from 'lucide-react';
 
 const INDO_MONTHS = [
@@ -84,6 +85,7 @@ import { formatDate, isToday } from '../../utils/date';
 import { handleImageError } from '../../utils/imageFallback';
 import { BannerCarousel } from '../../components/dashboard/BannerCarousel';
 import { IngredientStockWidget } from '../../components/dashboard/IngredientStockWidget';
+import { countCups, isToppingItem } from '../../utils/productUtils';
 
 
 
@@ -222,31 +224,153 @@ export const DashboardPage = () => {
   // State info hari terpilih saat diagram batang diklik
   const [selectedChartDay, setSelectedChartDay] = useState(null);
 
-  // Handler klik batang diagram / hari grafik
-  const handleBarClick = (entry) => {
-    if (!entry) {
-      setSelectedChartDay(null);
-      return;
-    }
-    const hasTransactions =
-      (entry.pemasukan || 0) > 0 ||
-      (entry.pengeluaran || 0) > 0 ||
-      (entry.transaksi || 0) > 0;
+  // Ref & State untuk fitur geser grafik seperti kereta (Horizontal Train Scroll / Drag)
+  const chartCardRef = useRef(null);
+  const chartScrollRef = useRef(null);
+  const isMouseDownRef = useRef(false);
+  const dragStartXRef = useRef(0);
+  const dragScrollLeftRef = useRef(0);
+  const hasScrolledRef = useRef(false);
 
-    if (hasTransactions) {
-      setSelectedChartDay(entry);
-    } else {
-      // Jika hari belum ada transaksi / hari esok, sembunyikan floating info
+  // Tutup info jika pengguna mengklik di luar area kartu grafik atau menekan Escape
+  useEffect(() => {
+    if (!selectedChartDay) return;
+
+    const handleClickOutside = (e) => {
+      // Jika target klik masih berada di dalam area kartu grafik, abaikan (jangan ditutup)
+      if (chartCardRef.current && chartCardRef.current.contains(e.target)) {
+        return;
+      }
       setSelectedChartDay(null);
+    };
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setSelectedChartDay(null);
+      }
+    };
+
+    // Gunakan 'click' (bukan 'mousedown') agar urutan event click saat berganti batang tidak terputus
+    document.addEventListener('click', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedChartDay]);
+
+  const handleMouseDown = (e) => {
+    if (!chartScrollRef.current) return;
+    isMouseDownRef.current = true;
+    hasScrolledRef.current = false;
+    dragStartXRef.current = e.pageX - chartScrollRef.current.offsetLeft;
+    dragScrollLeftRef.current = chartScrollRef.current.scrollLeft;
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isMouseDownRef.current || !chartScrollRef.current) return;
+    const x = e.pageX - chartScrollRef.current.offsetLeft;
+    const diff = x - dragStartXRef.current;
+    // Hanya anggap geser/drag jika pergerakan mouse melebihi 8px
+    if (Math.abs(diff) > 8) {
+      hasScrolledRef.current = true;
+      e.preventDefault();
+      chartScrollRef.current.scrollLeft = dragScrollLeftRef.current - diff * 1.3;
     }
   };
 
-  const handleChartClick = (state) => {
-    if (state && state.activePayload && state.activePayload.length) {
-      const clickedItem = state.activePayload[0].payload;
-      handleBarClick(clickedItem);
-    } else {
-      setSelectedChartDay(null);
+  const handleMouseUp = () => {
+    isMouseDownRef.current = false;
+    // Beri jeda sangat singkat agar event click yang menyusul tidak terhalang
+    setTimeout(() => {
+      hasScrolledRef.current = false;
+    }, 40);
+  };
+
+  const handleMouseLeave = () => {
+    isMouseDownRef.current = false;
+  };
+
+  // Touch listener untuk swipe mobile
+  const touchStartXRef = useRef(0);
+  const handleTouchStart = (e) => {
+    if (e.touches && e.touches[0]) {
+      touchStartXRef.current = e.touches[0].clientX;
+    }
+  };
+  const handleTouchMove = (e) => {
+    if (e.touches && e.touches[0]) {
+      const diff = Math.abs(e.touches[0].clientX - touchStartXRef.current);
+      if (diff > 10) {
+        hasScrolledRef.current = true;
+      }
+    }
+  };
+  const handleTouchEnd = () => {
+    setTimeout(() => {
+      hasScrolledRef.current = false;
+    }, 120);
+  };
+
+  // Handler klik batang diagram / hari grafik (memilih hari untuk melihat info pemasukan & pengeluaran)
+  const handleSelectChartDay = (dataOrState) => {
+    // Abaikan jika baru saja menggeser grafik
+    if (hasScrolledRef.current) return;
+    if (!dataOrState) return;
+
+    let entry = null;
+
+    // 1. Data langsung dari Bar / Cell / XAxis tick
+    if (dataOrState.dateKey) {
+      entry = dataOrState;
+    } else if (dataOrState.payload && dataOrState.payload.dateKey) {
+      entry = dataOrState.payload;
+    }
+    // 2. Dari BarChart activePayload
+    else if (dataOrState.activePayload && dataOrState.activePayload.length > 0) {
+      entry = dataOrState.activePayload[0].payload;
+    }
+    // 3. Dari BarChart activeTooltipIndex
+    else if (
+      dataOrState.activeTooltipIndex !== undefined &&
+      dataOrState.activeTooltipIndex !== null
+    ) {
+      const idx = Number(dataOrState.activeTooltipIndex);
+      if (!isNaN(idx) && dailySalesBarData && dailySalesBarData[idx]) {
+        entry = dailySalesBarData[idx];
+      }
+    }
+    // 4. Dari BarChart activeIndex
+    else if (
+      dataOrState.activeIndex !== undefined &&
+      dataOrState.activeIndex !== null
+    ) {
+      const idx = Number(dataOrState.activeIndex);
+      if (!isNaN(idx) && dailySalesBarData && dailySalesBarData[idx]) {
+        entry = dailySalesBarData[idx];
+      }
+    }
+    // 5. Dari BarChart activeLabel
+    else if (dataOrState.activeLabel && dailySalesBarData) {
+      entry = dailySalesBarData.find(
+        (d) => d.day === dataOrState.activeLabel || d.shortLabel === dataOrState.activeLabel
+      );
+    }
+
+    if (entry && entry.dateKey) {
+      const hasTx =
+        (entry.pemasukan || 0) > 0 ||
+        (entry.pengeluaran || 0) > 0 ||
+        (entry.transaksi || 0) > 0;
+
+      // Jika hari ini tidak ada transaksi, jangan tampilkan info apapun
+      if (!hasTx) {
+        setSelectedChartDay(null);
+        return;
+      }
+
+      setSelectedChartDay(entry);
     }
   };
 
@@ -400,13 +524,10 @@ export const DashboardPage = () => {
     };
   }, [selectedTransactions]);
 
-  // Total cup porsi terjual pada Tanggal yang Dipilih
+  // Total cup porsi terjual pada Tanggal yang Dipilih (topping tidak dihitung per cup)
   const totalCupTerpilih = useMemo(() => {
     return selectedTransactions.reduce((sum, tx) => {
-      return (
-        sum +
-        (tx.items?.reduce((itemSum, item) => itemSum + (item.qty || 1), 0) || 0)
-      );
+      return sum + countCups(tx.items);
     }, 0);
   }, [selectedTransactions]);
 
@@ -417,9 +538,8 @@ export const DashboardPage = () => {
       tx.items?.forEach((item) => {
         const key = item.nama || item.name;
         if (!key) return;
-        const cat = (item.category || item.kategori || '').toLowerCase();
         // Hanya hitung produk minuman utama (bukan topping extra)
-        if (cat.includes('topping') || key.toLowerCase().startsWith('extra ')) return;
+        if (isToppingItem(item)) return;
 
         if (!salesMap[key]) {
           salesMap[key] = {
@@ -443,53 +563,84 @@ export const DashboardPage = () => {
 
   const maxSoldQty = topSellingProducts[0]?.qty || 1;
 
-  // 5. DATA GRAFIK BATANG HARIAN SELAMA 1 MINGGU (Recharts BarChart: Urut Senin - Minggu)
-  const weeklyDailyBarData = useMemo(() => {
-    const days = [];
-    const DAY_NAMES = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-    const FULL_DAY_NAMES = [
-      'Senin',
-      'Selasa',
-      'Rabu',
-      'Kamis',
-      'Jumat',
-      'Sabtu',
-      'Minggu',
-    ];
-
+  // 5. DATA GRAFIK BATANG HARIAN (Multi-hari, dapat digeser horizontal seperti kereta ke hari sebelumnya)
+  const dailySalesBarData = useMemo(() => {
     const todayDate = new Date();
-    const currentDay = todayDate.getDay(); // 0 is Sunday, 1 is Monday, ..., 6 is Saturday
-    // Hitung jarak offset ke hari Senin pekan berjalan (Senin = index 0, Minggu = index 6)
-    const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay;
-    const mondayDate = new Date(todayDate);
-    mondayDate.setDate(todayDate.getDate() + mondayOffset);
+    todayDate.setHours(23, 59, 59, 999);
 
     const todayYear = todayDate.getFullYear();
     const todayMonth = String(todayDate.getMonth() + 1).padStart(2, '0');
     const todayDayNum = String(todayDate.getDate()).padStart(2, '0');
     const todayDateStr = `${todayYear}-${todayMonth}-${todayDayNum}`;
 
-    // Buat 7 slot hari: berurutan dari Senin sampai Minggu
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(mondayDate);
-      d.setDate(mondayDate.getDate() + i);
+    // Cari tanggal terawal dari seluruh transaksi & pengeluaran untuk menentukan rentang
+    const allTimestamps = [
+      ...transactions.map((t) => t.timestamp).filter(Boolean),
+      ...expenses.map((e) => e.timestamp).filter(Boolean),
+    ];
+
+    // Minimal sediakan 30 hari ke belakang agar grafik selalu leluasa digeser seperti kereta
+    let earliestDate = new Date();
+    earliestDate.setDate(todayDate.getDate() - 29);
+    earliestDate.setHours(0, 0, 0, 0);
+
+    if (allTimestamps.length > 0) {
+      const minTimestamp = Math.min(
+        ...allTimestamps.map((ts) => new Date(ts).getTime()).filter((t) => !isNaN(t))
+      );
+      if (!isNaN(minTimestamp)) {
+        const minDate = new Date(minTimestamp);
+        minDate.setHours(0, 0, 0, 0);
+        if (minDate < earliestDate) {
+          earliestDate = minDate;
+        }
+      }
+    }
+
+    const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+    const FULL_DAY_NAMES = [
+      'Minggu',
+      'Senin',
+      'Selasa',
+      'Rabu',
+      'Kamis',
+      'Jumat',
+      'Sabtu',
+    ];
+
+    const days = [];
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const diffDays = Math.max(
+      30,
+      Math.round((todayDate.getTime() - earliestDate.getTime()) / msPerDay)
+    );
+
+    // Batasi rentang maksimal 90 hari agar rendering grafik tetap sangat cepat
+    const totalDays = Math.min(90, diffDays);
+
+    for (let i = totalDays - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(todayDate.getDate() - i);
+      d.setHours(0, 0, 0, 0);
 
       const year = d.getFullYear();
       const month = String(d.getMonth() + 1).padStart(2, '0');
       const dayNum = String(d.getDate()).padStart(2, '0');
       const dateStr = `${year}-${month}-${dayNum}`;
 
-      const dayName = DAY_NAMES[i];
-      const fullDayName = FULL_DAY_NAMES[i];
+      const dayIdx = d.getDay();
+      const dayName = DAY_NAMES[dayIdx];
+      const fullDayName = FULL_DAY_NAMES[dayIdx];
+      const monthShort = INDO_MONTHS_SHORT[d.getMonth()] || d.toLocaleDateString('id-ID', { month: 'short' });
+      const isToday = dateStr === todayDateStr;
 
       days.push({
         dateKey: dateStr,
-        day: dayName,
-        fullDayName: `${fullDayName}, ${d.toLocaleDateString('id-ID', {
-          day: 'numeric',
-          month: 'short',
-        })}`,
-        isToday: dateStr === todayDateStr,
+        day: isToday ? 'Hari Ini' : `${dayName} ${d.getDate()}`,
+        shortLabel: `${d.getDate()} ${monthShort}`,
+        dayName,
+        fullDayName: `${fullDayName}, ${d.getDate()} ${monthShort} ${year}`,
+        isToday,
         omzet: 0,
         pemasukan: 0,
         pengeluaran: 0,
@@ -499,7 +650,7 @@ export const DashboardPage = () => {
       });
     }
 
-    // Akumulasi data transaksi tersimpan ke masing-masing hari (Pemasukan)
+    // Akumulasi data transaksi tersimpan ke masing-masing hari (Pemasukan & Cup tanpa topping)
     transactions.forEach((tx) => {
       if (!tx.timestamp) return;
       const txDate = new Date(tx.timestamp);
@@ -513,9 +664,7 @@ export const DashboardPage = () => {
         targetDay.pemasukan = (targetDay.pemasukan || 0) + (tx.total || 0);
         targetDay.omzet = targetDay.pemasukan;
         targetDay.transaksi += 1;
-        const totalItems =
-          tx.items?.reduce((sum, item) => sum + (item.qty || 1), 0) || 0;
-        targetDay.cup += totalItems;
+        targetDay.cup += countCups(tx.items);
       }
     });
 
@@ -544,28 +693,12 @@ export const DashboardPage = () => {
     return days;
   }, [transactions, expenses]);
 
-  // Statistik ringkas 1 minggu (Omzet & Cup)
-  const weeklyTotalRevenue = useMemo(() => {
-    return weeklyDailyBarData.reduce((sum, d) => sum + d.omzet, 0);
-  }, [weeklyDailyBarData]);
-
-  const weeklyAverageRevenue = Math.round(weeklyTotalRevenue / 7);
-
-  const weeklyTotalCups = useMemo(() => {
-    return weeklyDailyBarData.reduce((sum, d) => sum + (d.cup || 0), 0);
-  }, [weeklyDailyBarData]);
-
-  const weeklyAverageCups = Math.round(weeklyTotalCups / 7);
-
-  // Hari teramai (Peak Day) berdasarkan Omzet
-  const peakDay = useMemo(() => {
-    return [...weeklyDailyBarData].sort((a, b) => b.omzet - a.omzet)[0];
-  }, [weeklyDailyBarData]);
-
-  // Hari teramai (Peak Day) berdasarkan Cup
-  const peakDayCup = useMemo(() => {
-    return [...weeklyDailyBarData].sort((a, b) => (b.cup || 0) - (a.cup || 0))[0];
-  }, [weeklyDailyBarData]);
+  // Auto-scroll ke posisi paling kanan (Hari Ini) saat pertama kali buka
+  useEffect(() => {
+    if (chartScrollRef.current) {
+      chartScrollRef.current.scrollLeft = chartScrollRef.current.scrollWidth;
+    }
+  }, [dailySalesBarData]);
 
   // Periode data grafik menu: 'today' (Hari Ini) atau 'all' (Semua Waktu)
   const [menuFilterPeriod, setMenuFilterPeriod] = useState('today');
@@ -588,6 +721,8 @@ export const DashboardPage = () => {
       tx.items?.forEach((item) => {
         const name = item.nama || item.name;
         if (!name) return;
+        // Hanya hitung porsi cup produk minuman utama (bukan topping tambahan)
+        if (isToppingItem(item)) return;
         if (!salesMap[name]) {
           salesMap[name] = {
             name,
@@ -595,9 +730,9 @@ export const DashboardPage = () => {
             revenue: 0,
           };
         }
-        salesMap[name].qty += item.qty || 1;
+        salesMap[name].qty += Number(item.qty) || 1;
         salesMap[name].revenue +=
-          item.subtotal || (item.harga || item.price || 0) * (item.qty || 1);
+          item.subtotal || (Number(item.harga) || Number(item.price) || 0) * (Number(item.qty) || 1);
       });
     });
 
@@ -824,137 +959,205 @@ export const DashboardPage = () => {
         />
       </div>
 
-      {/* GRAFIK BATANG PENJUALAN HARIAN SELAMA 1 MINGGU (Recharts) */}
+      {/* GRAFIK PENJUALAN HARIAN (Dapat digeser seperti kereta untuk melihat hari sebelumnya) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Grafik Batang 1 Minggu (2 Cols) */}
-        <div className="lg:col-span-2 space-y-4">
-          <Card padding={false} className="p-5 overflow-hidden">
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-slate-900 shrink-0" />
-                <h3 className="font-extrabold text-slate-900 text-base">
-                  Grafik Penjualan Mingguan
-                </h3>
-              </div>
+        {/* Grafik Batang Geser Seperti Kereta (2 Cols) */}
+        <div ref={chartCardRef} className="lg:col-span-2 space-y-4">
+          <Card padding={false} className="p-5 overflow-hidden relative">
+            {/* Header: Judul Grafik Penjualan */}
+            <div className="flex items-center gap-2 mb-3">
+              <BarChart3 className="w-5 h-5 text-black shrink-0" />
+              <h3 className="font-extrabold text-slate-900 text-base leading-tight">
+                Grafik Penjualan
+              </h3>
             </div>
 
-            {/* Recharts BarChart Container (Fokus Grafik Harga) */}
+            {/* Recharts BarChart Container */}
             <div className="h-72 w-full relative">
-              {/* Floating Info Card: Mengambang & Stay di TENGAH atas grafik */}
-              {selectedChartDay &&
-                ((selectedChartDay.pemasukan || 0) > 0 ||
-                  (selectedChartDay.pengeluaran || 0) > 0 ||
-                  (selectedChartDay.transaksi || 0) > 0) && (
-                  <div className="absolute top-1.5 left-1/2 -translate-x-1/2 z-30 pointer-events-auto animate-in fade-in zoom-in-95 duration-150">
-                    <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/90 px-3.5 py-2.5 text-xs min-w-[170px] select-none">
-                      <div className="text-[11px] font-bold text-slate-500 mb-1.5 pb-1 border-b border-slate-100 flex items-center justify-between gap-3">
-                        <span>{selectedChartDay.fullDayName || selectedChartDay.day}</span>
+              {/* Floating Info Card: Mengambang & Stay di TENGAH atas grafik seperti sebelumnya */}
+              {selectedChartDay && (
+                <div
+                  className="absolute top-1 left-1/2 -translate-x-1/2 z-30 pointer-events-auto animate-in fade-in zoom-in-95 duration-150"
+                >
+                  <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/90 px-3.5 py-2.5 text-xs min-w-[200px] select-none hover:border-slate-300 transition-all">
+                    <div className="text-[11px] font-bold text-slate-500 mb-1.5 pb-1 border-b border-slate-100 flex items-center justify-between gap-2 whitespace-nowrap">
+                      <span className="truncate">{selectedChartDay.fullDayName || selectedChartDay.day}</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
                         {selectedChartDay.isToday && (
-                          <span className="text-[10px] px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded font-bold">
+                          <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold whitespace-nowrap">
                             Hari Ini
                           </span>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedChartDay(null)}
+                          className="p-0.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                          title="Tutup info"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
                       </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-slate-500 font-medium">Pemasukan:</span>
-                          <span className="font-extrabold text-slate-900">
-                            {formatIDR(selectedChartDay.pemasukan || selectedChartDay.omzet || 0)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-slate-500 font-medium">Pengeluaran:</span>
-                          <span className="font-extrabold text-rose-600">
-                            {formatIDR(selectedChartDay.pengeluaran || 0)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-100">
-                          <span className="text-slate-500 font-medium">Bersih:</span>
-                          <span className="font-extrabold text-emerald-600">
-                            {formatIDR(selectedChartDay.bersih || 0)}
-                          </span>
-                        </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-slate-500 font-medium">Pemasukan:</span>
+                        <span className="font-extrabold text-slate-900">
+                          {formatIDR(selectedChartDay.pemasukan || selectedChartDay.omzet || 0)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-slate-500 font-medium">Pengeluaran:</span>
+                        <span className="font-extrabold text-rose-600">
+                          {formatIDR(selectedChartDay.pengeluaran || 0)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-100">
+                        <span className="text-slate-500 font-medium">Bersih:</span>
+                        <span className="font-extrabold text-emerald-600">
+                          {formatIDR(selectedChartDay.bersih || 0)}
+                        </span>
                       </div>
                     </div>
                   </div>
-                )}
+                </div>
+              )}
 
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={weeklyDailyBarData}
-                  margin={{ top: 35, right: 12, left: 12, bottom: 0 }}
-                  onClick={handleChartClick}
+              {/* Container Grafik Horisontal (Scroll & Drag seperti kereta tanpa garis penanda) */}
+              <div
+                ref={chartScrollRef}
+                className="w-full h-full overflow-x-auto scroll-smooth select-none cursor-grab active:cursor-grabbing no-scrollbar"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseLeave}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                style={{
+                  WebkitOverflowScrolling: 'touch',
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${Math.max(680, dailySalesBarData.length * 60)}px`,
+                    minWidth: '100%',
+                    height: '100%',
+                  }}
                 >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="#f1f5f9"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="day"
-                    stroke="#64748b"
-                    fontSize={12}
-                    tickLine={false}
-                    axisLine={{ stroke: '#e2e8f0' }}
-                  />
-                  <YAxis hide />
-                  <Bar
-                    dataKey="omzet"
-                    radius={[8, 8, 0, 0]}
-                    maxBarSize={48}
-                    onClick={handleBarClick}
-                    style={{ outline: 'none', cursor: 'pointer' }}
-                  >
-                    {weeklyDailyBarData.map((entry, index) => {
-                      const hasTx =
-                        (entry.pemasukan || 0) > 0 ||
-                        (entry.pengeluaran || 0) > 0 ||
-                        (entry.transaksi || 0) > 0;
-                      const isSelected = selectedChartDay?.dateKey === entry.dateKey && hasTx;
-                      return (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={isSelected ? '#2d6a4f' : '#52b788'}
-                          onClick={(e) => {
-                            e?.stopPropagation?.();
-                            handleBarClick(entry);
-                          }}
-                          style={{ outline: 'none', cursor: 'pointer' }}
-                        />
-                      );
-                    })}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={dailySalesBarData}
+                      margin={{ top: 35, right: 12, left: 12, bottom: 0 }}
+                      onClick={handleSelectChartDay}
+                    >
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="#f1f5f9"
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="day"
+                        stroke="#64748b"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                        interval={0}
+                        tick={(props) => {
+                          const { x, y, payload } = props;
+                          const dayData = dailySalesBarData?.[payload?.index];
+                          const isSelected = selectedChartDay?.dateKey === dayData?.dateKey;
+                          const isToday = dayData?.isToday;
+                          const hasTx =
+                            (dayData?.pemasukan || 0) > 0 ||
+                            (dayData?.pengeluaran || 0) > 0 ||
+                            (dayData?.transaksi || 0) > 0;
+                          return (
+                            <g
+                              transform={`translate(${x},${y})`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (dayData && hasTx) {
+                                  handleSelectChartDay(dayData);
+                                } else {
+                                  setSelectedChartDay(null);
+                                }
+                              }}
+                              style={{ cursor: hasTx ? 'pointer' : 'default' }}
+                            >
+                              <text
+                                x={0}
+                                y={0}
+                                dy={14}
+                                textAnchor="middle"
+                                fill={isSelected ? '#1b4332' : isToday ? '#2d6a4f' : '#64748b'}
+                                fontWeight={isSelected || isToday ? '900' : '600'}
+                                fontSize={11}
+                              >
+                                {payload.value}
+                              </text>
+                            </g>
+                          );
+                        }}
+                      />
+                      <YAxis hide />
+                      <Tooltip
+                        content={() => null}
+                        cursor={false}
+                      />
+                      <Bar
+                        dataKey="omzet"
+                        radius={[8, 8, 0, 0]}
+                        maxBarSize={44}
+                        minPointSize={6}
+                        isAnimationActive={false}
+                        onClick={(data, index, e) => {
+                          e?.stopPropagation?.();
+                          const entry = data?.payload || data || (dailySalesBarData && dailySalesBarData[index]);
+                          if (entry) handleSelectChartDay(entry);
+                        }}
+                        style={{ outline: 'none' }}
+                      >
+                        {dailySalesBarData.map((entry, index) => {
+                          const hasTx =
+                            (entry.pemasukan || 0) > 0 ||
+                            (entry.pengeluaran || 0) > 0 ||
+                            (entry.transaksi || 0) > 0;
+                          const isSelected = selectedChartDay?.dateKey === entry.dateKey;
 
-            {/* 3 Metric Summary Chips di bawah grafik batang */}
-            <div className="mt-5 pt-4 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                  Total Omzet 1 Minggu
-                </span>
-                <span className="text-sm font-extrabold text-slate-900 mt-0.5 block">
-                  {formatIDR(weeklyTotalRevenue)}
-                </span>
-              </div>
+                          let barColor = '#52b788';
+                          if (isSelected) {
+                            barColor = '#1b4332';
+                          } else if (entry.isToday) {
+                            barColor = '#2d6a4f';
+                          } else if (!hasTx) {
+                            barColor = '#e2e8f0';
+                          }
 
-              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                  Rata-rata Penjualan / Hari
-                </span>
-                <span className="text-sm font-extrabold text-puko-800 mt-0.5 block">
-                  {formatIDR(weeklyAverageRevenue)}
-                </span>
-              </div>
-
-              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                  Penjualan Tertinggi
-                </span>
-                <span className="text-sm font-extrabold text-slate-900 mt-0.5 block truncate">
-                  {formatIDR(peakDay?.omzet || 0)}
-                </span>
+                          return (
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={barColor}
+                              onClick={(e) => {
+                                e?.stopPropagation?.();
+                                if (hasTx) {
+                                  handleSelectChartDay(entry);
+                                } else {
+                                  setSelectedChartDay(null);
+                                }
+                              }}
+                              style={{
+                                outline: 'none',
+                                cursor: hasTx ? 'pointer' : 'default',
+                              }}
+                            />
+                          );
+                        })}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
           </Card>

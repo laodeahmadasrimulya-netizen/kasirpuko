@@ -29,6 +29,7 @@ import { useSettings } from '../../context/SettingsContext';
 import { useExpenses } from '../../context/ExpenseContext';
 import { useIngredients } from '../../context/IngredientContext';
 import { isAlpukatShakeItem } from '../../services/ingredientService';
+import { countCups, isToppingItem } from '../../utils/productUtils';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -200,20 +201,7 @@ export const TransactionsPage = () => {
       else if (method === 'QRIS') totalQris += amt;
       else if (method === 'TRANSFER') totalTransfer += amt;
 
-      tx.items?.forEach((item) => {
-        const cat = (item.category || item.kategori || '').toLowerCase();
-        const id = String(item.id || '');
-        const name = (item.nama || item.name || '').toLowerCase();
-        const isTopping =
-          cat.includes('topping') ||
-          id.startsWith('puko-t') ||
-          name.startsWith('extra ') ||
-          name.includes('topping');
-
-        if (!isTopping) {
-          totalCup += item.qty || 1;
-        }
-      });
+      totalCup += countCups(tx.items);
     });
 
     return {

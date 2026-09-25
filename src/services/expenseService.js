@@ -1,3 +1,4 @@
+import { supabase } from './supabaseClient';
 import { storageService } from './storageService';
 import { isToday, isYesterday } from '../utils/date';
 
@@ -20,11 +21,11 @@ export const PAYMENT_SOURCES = [
   { id: 'PRIBADI', label: 'Uang Kasir / Pribadi' },
 ];
 
-// Initial realistic seed expenses
+// Initial seed expenses
 const INITIAL_EXPENSES = [
   {
     id: `exp-1`,
-    timestamp: new Date().toISOString(), // today
+    timestamp: new Date().toISOString(),
     title: 'Beli Es Batu 2 Bal',
     category: 'ES_AIR',
     amount: 20000,
@@ -34,7 +35,7 @@ const INITIAL_EXPENSES = [
   },
   {
     id: `exp-2`,
-    timestamp: new Date(now - DAY_MS - 1000 * 60 * 300).toISOString(), // Yesterday
+    timestamp: new Date(now - DAY_MS - 1000 * 60 * 300).toISOString(),
     title: 'Beli Kantong Kresek & Sedotan',
     category: 'KEMASAN',
     amount: 25000,
@@ -42,72 +43,64 @@ const INITIAL_EXPENSES = [
     loggedBy: 'Kasir',
     notes: '',
   },
-  {
-    id: `exp-${now - DAY_MS - 1000 * 60 * 180}`,
-    timestamp: new Date(now - DAY_MS - 1000 * 60 * 180).toISOString(), // Yesterday
-    title: 'Air Galon Isi Ulang (2 Galon)',
-    category: 'ES_AIR',
-    amount: 14000,
-    paymentSource: 'KAS_KASIR',
-    loggedBy: 'Kasir',
-    notes: '',
-  },
-  {
-    id: `exp-${now - DAY_MS * 2 - 1000 * 60 * 60}`,
-    timestamp: new Date(now - DAY_MS * 2 - 1000 * 60 * 60).toISOString(), // 2 days ago
-    title: 'Susu Kental Manis Carnation 3 Kaleng',
-    category: 'BAHAN_BAKU',
-    amount: 42000,
-    paymentSource: 'KAS_KASIR',
-    loggedBy: 'Admin',
-    notes: '',
-  },
-  {
-    id: `exp-${now - DAY_MS * 3 - 1000 * 60 * 90}`,
-    timestamp: new Date(now - DAY_MS * 3 - 1000 * 60 * 90).toISOString(), // 3 days ago
-    title: 'Sabun Cuci Sunlight & Tisu Gulung',
-    category: 'KEBERSIHAN',
-    amount: 18000,
-    paymentSource: 'KAS_KASIR',
-    loggedBy: 'Kasir',
-    notes: '',
-  },
 ];
+
+const mapFromDB = (item) => ({
+  id: String(item.id),
+  timestamp: item.timestamp,
+  title: item.title,
+  category: item.category,
+  amount: Number(item.amount) || 0,
+  paymentSource: item.payment_source || item.paymentSource || 'KAS_KASIR',
+  payment_source: item.payment_source || item.paymentSource || 'KAS_KASIR',
+  loggedBy: item.logged_by || item.loggedBy || 'Kasir',
+  logged_by: item.logged_by || item.loggedBy || 'Kasir',
+  notes: item.notes || '',
+});
+
+const mapToDB = (item) => ({
+  id: String(item.id),
+  timestamp: item.timestamp || new Date().toISOString(),
+  title: item.title?.trim() || 'Pengeluaran Tanpa Nama',
+  category: item.category || 'LAINNYA',
+  amount: Math.max(0, Number(item.amount) || 0),
+  payment_source: item.paymentSource || item.payment_source || 'KAS_KASIR',
+  logged_by: item.loggedBy || item.logged_by || 'Kasir',
+  notes: item.notes?.trim() || '',
+});
 
 export const expenseService = {
   /**
-   * Get all expenses sorted by date descending (newest first)
+   * Mengambil semua pengeluaran dari Supabase (terbaru di atas)
    */
   async getAll() {
+    try {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .order('timestamp', { ascending: false });
+
+      if (error) throw error;
+
+      if (data && Array.isArray(data)) {
+        const mapped = data.map(mapFromDB);
+        storageService.set(STORAGE_KEY, mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('[expenseService] Gagal load dari Supabase, memakai cache lokal:', err.message);
+    }
+
     let expenses = storageService.get(STORAGE_KEY);
     if (!expenses || !Array.isArray(expenses) || expenses.length === 0) {
       expenses = INITIAL_EXPENSES;
       storageService.set(STORAGE_KEY, expenses);
-    } else {
-      let changed = false;
-      expenses = expenses.map((item) => {
-        let updated = item;
-        if (item.title === 'Beli Es Batu Bal 2 Karung') {
-          changed = true;
-          updated = { ...updated, title: 'Beli Es Batu 2 Bal' };
-        }
-        const role = (item.loggedBy || '').toLowerCase().includes('admin') ? 'Admin' : 'Kasir';
-        if (item.loggedBy !== role) {
-          changed = true;
-          updated = { ...updated, loggedBy: role };
-        }
-        return updated;
-      });
-      if (changed) {
-        storageService.set(STORAGE_KEY, expenses);
-      }
     }
-    // Return sorted newest first
-    return [...expenses].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    return expenses.map(mapFromDB).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   },
 
   /**
-   * Get expense by ID
+   * Ambil pengeluaran berdasarkan ID
    */
   async getById(id) {
     const list = await this.getAll();
@@ -115,10 +108,9 @@ export const expenseService = {
   },
 
   /**
-   * Create a new expense record
+   * Catat pengeluaran baru ke Supabase & cache
    */
   async create(data) {
-    const list = await this.getAll();
     const newExpense = {
       id: `exp-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       timestamp: data.timestamp || new Date().toISOString(),
@@ -129,14 +121,23 @@ export const expenseService = {
       loggedBy: data.loggedBy || 'Kasir',
       notes: data.notes?.trim() || '',
     };
+    const dbPayload = mapToDB(newExpense);
 
-    const updated = [newExpense, ...list];
+    try {
+      const { error } = await supabase.from('expenses').insert([dbPayload]);
+      if (error) console.warn('[expenseService] create error di Supabase:', error);
+    } catch (err) {
+      console.warn('[expenseService] create error:', err);
+    }
+
+    const list = await this.getAll();
+    const updated = [newExpense, ...list.filter((x) => x.id !== newExpense.id)];
     storageService.set(STORAGE_KEY, updated);
     return newExpense;
   },
 
   /**
-   * Update existing expense record
+   * Edit pengeluaran yang ada
    */
   async update(id, data) {
     const list = await this.getAll();
@@ -151,6 +152,18 @@ export const expenseService = {
       amount: Math.max(0, Number(data.amount) || 0),
       title: data.title?.trim() || list[index].title,
     };
+    const dbPayload = mapToDB(updatedExpense);
+
+    try {
+      const { error } = await supabase
+        .from('expenses')
+        .update(dbPayload)
+        .eq('id', id);
+
+      if (error) console.warn('[expenseService] update error di Supabase:', error);
+    } catch (err) {
+      console.warn('[expenseService] update error:', err);
+    }
 
     list[index] = updatedExpense;
     storageService.set(STORAGE_KEY, list);
@@ -158,9 +171,20 @@ export const expenseService = {
   },
 
   /**
-   * Delete expense record
+   * Hapus pengeluaran
    */
   async delete(id) {
+    try {
+      const { error } = await supabase
+        .from('expenses')
+        .delete()
+        .eq('id', id);
+
+      if (error) console.warn('[expenseService] delete error di Supabase:', error);
+    } catch (err) {
+      console.warn('[expenseService] delete error:', err);
+    }
+
     const list = await this.getAll();
     const filtered = list.filter((item) => item.id !== id);
     storageService.set(STORAGE_KEY, filtered);
@@ -168,7 +192,7 @@ export const expenseService = {
   },
 
   /**
-   * Get expense summary metrics
+   * Ringkasan metrik pengeluaran
    */
   async getSummary() {
     const list = await this.getAll();
@@ -215,7 +239,7 @@ export const expenseService = {
   },
 
   /**
-   * Reset data to initial demo data
+   * Reset data demo
    */
   async reset() {
     storageService.set(STORAGE_KEY, INITIAL_EXPENSES);

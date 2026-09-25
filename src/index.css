@@ -43,6 +43,17 @@
   background: #94a3b8;
 }
 
+/* Sembunyikan scrollbar sepenuhnya untuk elemen berkategori no-scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
 /* Disable Recharts focus outlines and tap highlights on click */
 .recharts-wrapper,
 .recharts-wrapper *:focus,

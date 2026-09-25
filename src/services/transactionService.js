@@ -1,8 +1,43 @@
+import { supabase } from './supabaseClient';
 import { storageService } from './storageService';
 import { generateInvoiceCode } from '../utils/invoice';
 import { isToday } from '../utils/date';
 
 const STORAGE_KEY = 'transactions';
+
+const mapFromDB = (tx) => ({
+  id: String(tx.id),
+  timestamp: tx.timestamp,
+  cashierName: tx.cashier_name || tx.cashierName || 'Kasir 01',
+  cashier_name: tx.cashier_name || tx.cashierName || 'Kasir 01',
+  customerName: tx.customer_name || tx.customerName || '',
+  customer_name: tx.customer_name || tx.customerName || '',
+  paymentMethod: tx.payment_method || tx.paymentMethod || 'TUNAI',
+  payment_method: tx.payment_method || tx.paymentMethod || 'TUNAI',
+  subtotal: Number(tx.subtotal) || 0,
+  discount: Number(tx.discount) || 0,
+  total: Number(tx.total) || 0,
+  amountPaid: Number(tx.amount_paid ?? tx.amountPaid ?? 0),
+  amount_paid: Number(tx.amount_paid ?? tx.amountPaid ?? 0),
+  change: Number(tx.change) || 0,
+  status: tx.status || 'COMPLETED',
+  items: Array.isArray(tx.items) ? tx.items : [],
+});
+
+const mapToDB = (tx) => ({
+  id: String(tx.id),
+  timestamp: tx.timestamp || new Date().toISOString(),
+  cashier_name: tx.cashierName || tx.cashier_name || 'Kasir 01',
+  customer_name: tx.customerName || tx.customer_name || '',
+  payment_method: tx.paymentMethod || tx.payment_method || 'TUNAI',
+  subtotal: Number(tx.subtotal) || 0,
+  discount: Number(tx.discount) || 0,
+  total: Number(tx.total) || 0,
+  amount_paid: Number(tx.amountPaid ?? tx.amount_paid ?? 0),
+  change: Number(tx.change) || 0,
+  status: tx.status || 'COMPLETED',
+  items: Array.isArray(tx.items) ? tx.items : [],
+});
 const DAY_MS = 1000 * 60 * 60 * 24;
 const now = Date.now();
 
@@ -344,26 +379,42 @@ const INITIAL_TRANSACTIONS = [
 
 export const transactionService = {
   /**
-   * Get all transactions (newest first)
+   * Mengambil semua transaksi dari Supabase (terbaru di atas)
    */
   async getAll() {
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('timestamp', { ascending: false });
+
+      if (error) throw error;
+
+      if (data && Array.isArray(data) && data.length > 0) {
+        const mapped = data.map(mapFromDB);
+        storageService.set(STORAGE_KEY, mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('[transactionService] Gagal load dari Supabase, memakai cache lokal:', err.message);
+    }
+
     let list = storageService.get(STORAGE_KEY);
-    // Jika storage kosong atau masih seed versi lama (kurang dari 7 transaksi untuk 1 minggu)
+    // Jika storage kosong atau masih seed versi lama
     if (!list || !Array.isArray(list) || list.length < 8) {
       list = INITIAL_TRANSACTIONS;
       storageService.set(STORAGE_KEY, list);
     }
-    return list;
+    return list.map(mapFromDB);
   },
 
   /**
-   * Save a new transaction
+   * Menyimpan transaksi penjualan baru ke Supabase dan cache lokal
    */
   async create(payload) {
-    const transactions = await this.getAll();
     const newTx = {
       id: payload.id || generateInvoiceCode(),
-      timestamp: new Date().toISOString(),
+      timestamp: payload.timestamp || new Date().toISOString(),
       cashierName: payload.cashierName || 'Kasir 01',
       customerName: payload.customerName?.trim() || '',
       paymentMethod: payload.paymentMethod || 'TUNAI',
@@ -377,8 +428,19 @@ export const transactionService = {
       bankName: payload.bankName || null,
       referenceNo: payload.referenceNo || null,
     };
+    const dbPayload = mapToDB(newTx);
 
-    const updated = [newTx, ...transactions];
+    // Simpan ke Supabase
+    try {
+      const { error } = await supabase.from('transactions').insert([dbPayload]);
+      if (error) console.warn('[transactionService] create error di Supabase:', error);
+    } catch (err) {
+      console.warn('[transactionService] create error:', err);
+    }
+
+    // Simpan ke cache lokal
+    const transactions = await this.getAll();
+    const updated = [newTx, ...transactions.filter((t) => t.id !== newTx.id)];
     storageService.set(STORAGE_KEY, updated);
     return newTx;
   },
@@ -413,6 +475,11 @@ export const transactionService = {
    * Clear transaction history (for testing / reset)
    */
   async clearHistory() {
+    try {
+      await supabase.from('transactions').delete().neq('id', '___non_existent___');
+    } catch (err) {
+      console.warn('[transactionService] clearHistory error di Supabase:', err);
+    }
     storageService.set(STORAGE_KEY, []);
     return true;
   },

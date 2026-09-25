@@ -8,13 +8,15 @@ import { TransactionsPage } from '../pages/Transactions';
 import { ExpensesPage } from '../pages/Expenses';
 import { SettingsPage } from '../pages/Settings';
 import { LoginPage } from '../pages/Auth/Login';
+import { AuthCallback } from '../pages/Auth/AuthCallback';
 import { ProtectedRoute } from './ProtectedRoute';
 
 export const AppRoutes = () => {
   return (
     <Routes>
-      {/* Public Route: Login */}
+      {/* Public Routes: Login & Auth Callback */}
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
 
       {/* Protected Routes wrapped in MainLayout */}
       <Route

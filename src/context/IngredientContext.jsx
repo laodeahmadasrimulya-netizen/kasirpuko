@@ -11,6 +11,13 @@ export const IngredientProvider = ({ children }) => {
     setIngredients(ingredientService.getAll());
   }, []);
 
+  // Ambil stok bahan baku terbaru dari Supabase saat aplikasi dibuka
+  useEffect(() => {
+    ingredientService.fetchFromSupabase().then((res) => {
+      if (res) setIngredients(res);
+    });
+  }, []);
+
   // Sync across tabs/storage changes
   useEffect(() => {
     const handleStorageChange = (e) => {

@@ -1,140 +1,227 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ShieldCheck,
   User,
   ArrowRight,
   AlertCircle,
   KeyRound,
-  Phone,
   CheckCircle2,
-  X,
   Lock,
   Eye,
   EyeOff,
+  Mail,
+  RefreshCw,
+  ArrowLeft,
+  Sparkles,
+  ShieldCheck,
+  Phone,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { playSuccessSound } from '../../utils/sound';
 
 export const LoginPage = () => {
-  const { login, findUserByPhone, resetPasswordWithPhone, users } = useAuth();
+  const {
+    user,
+    isAuthenticated,
+    login,
+    signUpWithEmail,
+    verifyEmailOtp,
+    resendOtp,
+    findUserByPhone,
+    resetPasswordWithPhone,
+  } = useAuth();
   const navigate = useNavigate();
 
-  const [selectedRole, setSelectedRole] = useState('ADMIN'); // 'ADMIN' | 'KASIR'
-  const [username, setUsername] = useState('');
-  const [pin, setPin] = useState('');
-  const [showPin, setShowPin] = useState(false);
+  // If authenticated (e.g. from clicking confirmation link in Gmail), redirect automatically
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      const redirectPath = user.role === 'ADMIN' ? '/dashboard' : '/kasir';
+      navigate(redirectPath, { replace: true });
+    }
+  }, [isAuthenticated, user, navigate]);
+
+  // Mode: 'LOGIN' | 'REGISTER' | 'VERIFY_OTP'
+  const [mode, setMode] = useState('LOGIN');
+
+  // Form states - Login
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+
+  // Form states - Register
+  const [regName, setRegName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [showRegPassword, setShowRegPassword] = useState(false);
+
+  // Form states - OTP Verification
+  const [otpCode, setOtpCode] = useState('');
+  const [targetEmail, setTargetEmail] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  // UI status
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Akun Admin dan Kasir aktif
-  const adminAccount = useMemo(() => {
-    return (
-      users?.find((u) => u.role === 'ADMIN') || {
-        username: 'admin',
-        pin: '1234',
-        name: 'Owner',
-      }
-    );
-  }, [users]);
-
-  const kasirAccount = useMemo(() => {
-    return (
-      users?.find((u) => u.role === 'KASIR') || {
-        username: 'kasir',
-        pin: '0000',
-        name: 'Kasir 01',
-      }
-    );
-  }, [users]);
-
-  // Handler memilih peran (sekaligus mengisi username & sandi otomatis)
-  const handleSelectRole = (role) => {
-    setSelectedRole(role);
-    setError('');
-    if (role === 'ADMIN') {
-      setUsername(adminAccount.username);
-      setPin(adminAccount.pin);
-    } else {
-      setUsername(kasirAccount.username);
-      setPin(kasirAccount.pin);
-    }
-  };
-
-  // Isi awal saat pertama kali buka aplikasi
-  useEffect(() => {
-    if (!username && !pin) {
-      if (selectedRole === 'ADMIN') {
-        setUsername(adminAccount.username);
-        setPin(adminAccount.pin);
-      } else {
-        setUsername(kasirAccount.username);
-        setPin(kasirAccount.pin);
-      }
-    }
-  }, [selectedRole, adminAccount, kasirAccount]);
-
-  // Forgot password modal state
+  // Forgot password modal
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
   const [recoveryPhone, setRecoveryPhone] = useState('');
   const [verifiedUser, setVerifiedUser] = useState(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [recoveryError, setRecoveryError] = useState('');
-  const [recoverySuccess, setRecoverySuccess] = useState('');
 
-  const handleFormSubmit = (e) => {
+  // Handle countdown for resend OTP
+  useEffect(() => {
+    let timer;
+    if (resendCooldown > 0) {
+      timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
+
+  // Switch mode helper
+  const switchMode = (newMode) => {
+    setMode(newMode);
+    setError('');
+    setSuccessMessage('');
+  };
+
+  // 1. Submit LOGIN
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSuccessMessage('');
     setIsLoading(true);
 
-    const result = login(username, pin);
-    if (result.success) {
-      if (selectedRole && result.user.role !== selectedRole) {
-        setError(
-          selectedRole === 'ADMIN'
-            ? 'Akun ini terdaftar sebagai Kasir. Silakan pilih masuk sebagai Kasir.'
-            : 'Akun ini terdaftar sebagai Admin. Silakan pilih masuk sebagai Admin.'
-        );
-        setIsLoading(false);
-        return;
-      }
+    try {
+      const result = await login(loginIdentifier, loginPassword);
 
-      playSuccessSound();
-      navigate(result.user.role === 'ADMIN' ? '/dashboard' : '/kasir', { replace: true });
-    } else {
-      setError(result.message);
+      if (result.success) {
+        playSuccessSound();
+        const redirectPath = result.user.role === 'ADMIN' ? '/dashboard' : '/kasir';
+        navigate(redirectPath, { replace: true });
+      } else {
+        if (result.code === 'EMAIL_NOT_CONFIRMED') {
+          setTargetEmail(result.email || loginIdentifier);
+          setMode('VERIFY_OTP');
+          setSuccessMessage(result.message);
+        } else {
+          setError(result.message);
+        }
+      }
+    } catch (err) {
+      setError(err.message || 'Terjadi kesalahan saat masuk. Coba lagi.');
+    } finally {
       setIsLoading(false);
     }
   };
 
-  const handleVerifyPhone = (e) => {
+  // 2. Submit REGISTER
+  const handleRegisterSubmit = async (e) => {
     e.preventDefault();
-    setRecoveryError('');
-    setRecoverySuccess('');
+    setError('');
+    setSuccessMessage('');
 
-    const target = findUserByPhone(recoveryPhone);
-    if (!target) {
-      setRecoveryError(
-        'Nomor WhatsApp ini tidak ditemukan di sistem. Pastikan nomor sesuai dengan yang terdaftar.'
-      );
+    if (regPassword !== regConfirmPassword) {
+      setError('Konfirmasi password tidak cocok.');
       return;
     }
 
+    if (regPassword.length < 6) {
+      setError('Password minimal 6 karakter.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const result = await signUpWithEmail(regName, regEmail, regPassword);
+
+      if (result.needsConfirmation) {
+        setTargetEmail(result.email);
+        setMode('VERIFY_OTP');
+        setResendCooldown(45);
+        setSuccessMessage(
+          `Kode konfirmasi 6-digit telah dikirim ke ${result.email}. Silakan cek kotak masuk Gmail Anda.`
+        );
+      } else {
+        // Direct login if confirmation was not required
+        playSuccessSound();
+        navigate('/dashboard', { replace: true });
+      }
+    } catch (err) {
+      setError(err.message || 'Pendaftaran gagal. Pastikan email Anda valid.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 3. Submit OTP VERIFICATION
+  const handleVerifyOtpSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMessage('');
+    setIsLoading(true);
+
+    try {
+      const cleanToken = otpCode.trim().replace(/\s+/g, '');
+      const result = await verifyEmailOtp(targetEmail, cleanToken);
+
+      if (result.success) {
+        playSuccessSound();
+        setSuccessMessage('Email berhasil dikonfirmasi! Mengalihkan ke sistem...');
+        setTimeout(() => {
+          navigate('/dashboard', { replace: true });
+        }, 800);
+      }
+    } catch (err) {
+      setError(err.message || 'Kode konfirmasi salah atau kadaluarsa. Silakan periksa kembali.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 4. Resend OTP
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0) return;
+    setError('');
+    setSuccessMessage('');
+    setIsLoading(true);
+
+    try {
+      await resendOtp(targetEmail);
+      setResendCooldown(60);
+      setSuccessMessage(`Kode baru telah dikirim ulang ke ${targetEmail}.`);
+    } catch (err) {
+      setError(err.message || 'Gagal mengirim ulang kode. Silakan coba lagi.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Forgot password handlers
+  const handleVerifyPhone = (e) => {
+    e.preventDefault();
+    setRecoveryError('');
+    const target = findUserByPhone(recoveryPhone);
+    if (!target) {
+      setRecoveryError('Nomor WhatsApp ini tidak ditemukan di sistem.');
+      return;
+    }
     setVerifiedUser(target);
   };
 
   const handleResetPassword = (e) => {
     e.preventDefault();
     setRecoveryError('');
-
     if (newPassword.length < 4) {
-      setRecoveryError('Password minimal 4 karakter / digit.');
+      setRecoveryError('Password minimal 4 karakter.');
       return;
     }
-
     if (newPassword !== confirmPassword) {
       setRecoveryError('Konfirmasi password tidak cocok.');
       return;
@@ -143,38 +230,27 @@ export const LoginPage = () => {
     const res = resetPasswordWithPhone(recoveryPhone, newPassword);
     if (res.success) {
       playSuccessSound();
-      setSuccessMessage(
-        `Password untuk akun "${res.user.name}" (${res.user.role}) berhasil diperbarui! Silakan masuk.`
-      );
-      setUsername(res.user.username);
-      setPin(newPassword);
+      setSuccessMessage(`Password akun "${res.user.name}" berhasil diperbarui! Silakan masuk.`);
+      setLoginIdentifier(res.user.username || res.user.email || '');
+      setLoginPassword(newPassword);
       setIsForgotModalOpen(false);
       setVerifiedUser(null);
-      setRecoveryPhone('');
-      setNewPassword('');
-      setConfirmPassword('');
     } else {
       setRecoveryError(res.message);
     }
   };
 
-  const closeForgotModal = () => {
-    setIsForgotModalOpen(false);
-    setVerifiedUser(null);
-    setRecoveryPhone('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setRecoveryError('');
-    setRecoverySuccess('');
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-stone-50 via-slate-100 to-slate-200 flex flex-col justify-center items-center px-4 py-12 relative overflow-hidden selection:bg-puko-500 selection:text-white">
-      <div className="w-full max-w-md relative z-10 space-y-6">
+    <div className="min-h-screen bg-gradient-to-b from-stone-50 via-slate-100 to-slate-200 flex flex-col justify-center items-center px-4 py-8 sm:py-12 relative overflow-hidden selection:bg-puko-500 selection:text-white">
+      {/* Decorative background glows */}
+      <div className="absolute top-10 left-1/2 -translate-x-1/2 w-96 h-96 bg-puko-400/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-10 right-10 w-72 h-72 bg-amber-400/10 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="w-full max-w-md relative z-10 space-y-5">
         {/* Brand Logo & Header */}
-        <div className="text-center space-y-3">
+        <div className="text-center space-y-2">
           <div className="inline-block relative">
-            <div className="w-24 h-24 mx-auto rounded-full overflow-hidden bg-white p-1 shadow-lg border border-slate-200/80">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto rounded-full overflow-hidden bg-white p-1 shadow-xl border border-slate-200/90 ring-4 ring-puko-500/15">
               <img
                 src="/logo.png"
                 alt="PUKO Logo"
@@ -184,247 +260,384 @@ export const LoginPage = () => {
           </div>
 
           <div>
-            <h1 className="text-3xl font-black tracking-wider text-slate-900">
-              PUKO
+            <h1 className="text-2xl sm:text-3xl font-black tracking-wider text-slate-900">
+              PUKO POS
             </h1>
-            <p className="text-xs font-bold text-slate-600 tracking-wide mt-1">
+            <p className="text-xs font-bold text-slate-500 tracking-wide mt-0.5">
               Alpukat Kocok No Serat No Pahit
             </p>
           </div>
         </div>
 
-        {/* Main Login Card */}
-        <div className="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-xl space-y-5">
-          {/* Pilih Masuk Sebagai Admin atau Kasir */}
-          <div className="space-y-2">
-            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider text-center">
-              Pilih Masuk Sebagai
-            </label>
-            <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
-              <button
-                type="button"
-                onClick={() => handleSelectRole('ADMIN')}
-                className={`py-2 px-3 rounded-xl text-xs font-extrabold transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
-                  selectedRole === 'ADMIN'
-                    ? 'bg-puko-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Admin</span>
-                </div>
-                <span
-                  className={`text-[10px] font-mono ${
-                    selectedRole === 'ADMIN' ? 'text-puko-100' : 'text-slate-500'
-                  }`}
-                >
-                  Sandi:{' '}
-                  <strong
-                    className={
-                      selectedRole === 'ADMIN'
-                        ? 'text-white font-black'
-                        : 'text-puko-700 font-bold'
-                    }
-                  >
-                    {adminAccount.pin}
-                  </strong>
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSelectRole('KASIR')}
-                className={`py-2 px-3 rounded-xl text-xs font-extrabold transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
-                  selectedRole === 'KASIR'
-                    ? 'bg-puko-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <User className="w-4 h-4" />
-                  <span>Kasir</span>
-                </div>
-                <span
-                  className={`text-[10px] font-mono ${
-                    selectedRole === 'KASIR' ? 'text-puko-100' : 'text-slate-500'
-                  }`}
-                >
-                  Sandi:{' '}
-                  <strong
-                    className={
-                      selectedRole === 'KASIR'
-                        ? 'text-white font-black'
-                        : 'text-puko-700 font-bold'
-                    }
-                  >
-                    {kasirAccount.pin}
-                  </strong>
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* Card Info Sandi Masuk: Perlihatkan sandi masuk Admin dan Kasir */}
-          <div className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-3.5 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <KeyRound className="w-3.5 h-3.5 text-puko-600" />
-                Sandi Masuk Akun:
-              </span>
-              <span className="text-[10px] text-slate-400 font-semibold">Klik untuk memilih</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {/* Box Admin */}
-              <button
-                type="button"
-                onClick={() => handleSelectRole('ADMIN')}
-                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                  selectedRole === 'ADMIN'
-                    ? 'border-puko-600 bg-white ring-2 ring-puko-500/20 shadow-xs'
-                    : 'border-slate-200 bg-white/70 hover:bg-white text-slate-600'
-                }`}
-              >
-                <div className="flex items-center justify-between text-xs font-extrabold text-slate-800">
-                  <span className="flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
-                    Admin
-                  </span>
-                  <span className="text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded font-extrabold">
-                    Owner
-                  </span>
-                </div>
-                <div className="mt-1 text-[11px] text-slate-500">
-                  User: <span className="font-mono font-bold text-slate-700">{adminAccount.username}</span>
-                </div>
-                <div className="text-[11px] text-slate-600 mt-0.5">
-                  Sandi:{' '}
-                  <span className="font-mono font-black text-puko-700 bg-puko-50 border border-puko-200 px-1.5 py-0.2 rounded">
-                    {adminAccount.pin}
-                  </span>
-                </div>
-              </button>
-
-              {/* Box Kasir */}
-              <button
-                type="button"
-                onClick={() => handleSelectRole('KASIR')}
-                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                  selectedRole === 'KASIR'
-                    ? 'border-puko-600 bg-white ring-2 ring-puko-500/20 shadow-xs'
-                    : 'border-slate-200 bg-white/70 hover:bg-white text-slate-600'
-                }`}
-              >
-                <div className="flex items-center justify-between text-xs font-extrabold text-slate-800">
-                  <span className="flex items-center gap-1">
-                    <User className="w-3.5 h-3.5 text-emerald-600" />
-                    Kasir
-                  </span>
-                  <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-extrabold">
-                    Outlet
-                  </span>
-                </div>
-                <div className="mt-1 text-[11px] text-slate-500">
-                  User: <span className="font-mono font-bold text-slate-700">{kasirAccount.username}</span>
-                </div>
-                <div className="text-[11px] text-slate-600 mt-0.5">
-                  Sandi:{' '}
-                  <span className="font-mono font-black text-puko-700 bg-puko-50 border border-puko-200 px-1.5 py-0.2 rounded">
-                    {kasirAccount.pin}
-                  </span>
-                </div>
-              </button>
-            </div>
-          </div>
-
+        {/* Main Card */}
+        <div className="bg-white/95 backdrop-blur-xs border border-slate-200/90 rounded-3xl p-6 sm:p-7 shadow-xl shadow-slate-900/5 space-y-5">
           {/* Success Banner */}
           {successMessage && (
-            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start gap-2.5 animate-fadeIn">
+            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start gap-2.5 animate-fadeIn">
               <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
-              <span>{successMessage}</span>
+              <span className="leading-relaxed">{successMessage}</span>
             </div>
           )}
 
           {/* Error Banner */}
           {error && (
-            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2.5 animate-shake">
+            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2.5 animate-shake">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
-              <span>{error}</span>
+              <span className="leading-relaxed">{error}</span>
             </div>
           )}
 
-          {/* Form Login */}
-          <form onSubmit={handleFormSubmit} className="space-y-4 pt-1">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Username
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                  <User className="w-4 h-4" />
+          {/* ============================================================== */}
+          {/* 1. LOGIN FORM                                                  */}
+          {/* ============================================================== */}
+          {mode === 'LOGIN' && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-lg font-black text-slate-800 tracking-tight">
+                  Masuk ke Aplikasi
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Masukkan email atau username Anda untuk melanjutkan
+                </p>
+              </div>
+
+              <form onSubmit={handleLoginSubmit} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Email atau Username
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Mail className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="text"
+                      value={loginIdentifier}
+                      onChange={(e) => setLoginIdentifier(e.target.value)}
+                      placeholder="contoh: alpukatkocokpuko@gmail.com"
+                      required
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white transition-all font-sans"
+                    />
+                  </div>
                 </div>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Masukkan username atau no. WhatsApp"
-                  required
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white transition-all placeholder:text-slate-400"
-                />
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Kata Sandi
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsForgotModalOpen(true)}
+                      className="text-xs text-puko-700 hover:text-puko-800 font-bold hover:underline cursor-pointer"
+                    >
+                      Lupa Sandi?
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <input
+                      type={showLoginPassword ? 'text' : 'password'}
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder="Masukkan kata sandi"
+                      required
+                      className={`w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-10 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white transition-all font-mono ${
+                        showLoginPassword ? 'tracking-normal font-bold' : 'tracking-widest font-bold'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                      title={showLoginPassword ? 'Sembunyikan sandi' : 'Lihat sandi'}
+                    >
+                      {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-3 px-4 rounded-xl bg-puko-600 hover:bg-puko-700 disabled:opacity-50 text-white font-extrabold text-sm shadow-md shadow-puko-900/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
+                >
+                  {isLoading ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <span>Masuk</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Link ke Pendaftaran */}
+              <div className="pt-3 border-t border-slate-100 text-center">
+                <p className="text-xs text-slate-600">
+                  Belum memiliki akun?{' '}
+                  <button
+                    type="button"
+                    onClick={() => switchMode('REGISTER')}
+                    className="font-extrabold text-puko-700 hover:text-puko-800 hover:underline cursor-pointer"
+                  >
+                    Daftar di sini
+                  </button>
+                </p>
               </div>
             </div>
+          )}
 
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Password
-                </label>
+          {/* ============================================================== */}
+          {/* 2. REGISTER FORM                                               */}
+          {/* ============================================================== */}
+          {mode === 'REGISTER' && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-lg font-black text-slate-800 tracking-tight">
+                  Daftar Akun Baru
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Daftarkan email Anda untuk mengelola kasir & toko PUKO
+                </p>
+              </div>
+
+              <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-2xl text-[11px] text-amber-900 flex items-start gap-2">
+                <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  Kode konfirmasi 6-digit akan dikirimkan ke akun Gmail Anda untuk verifikasi identitas.
+                </span>
+              </div>
+
+              <form onSubmit={handleRegisterSubmit} className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Nama Lengkap
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="text"
+                      value={regName}
+                      onChange={(e) => setRegName(e.target.value)}
+                      placeholder="Contoh: Owner PUKO"
+                      required
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white transition-all font-sans"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Alamat Email (Gmail)
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Mail className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="email"
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                      placeholder="alpukatkocokpuko@gmail.com"
+                      required
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white transition-all font-sans"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Kata Sandi (Minimal 6 Karakter)
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <input
+                      type={showRegPassword ? 'text' : 'password'}
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="Minimal 6 karakter"
+                      required
+                      minLength={6}
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-10 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white transition-all font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegPassword(!showRegPassword)}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                    >
+                      {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Ulangi Kata Sandi
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="password"
+                      value={regConfirmPassword}
+                      onChange={(e) => setRegConfirmPassword(e.target.value)}
+                      placeholder="Ulangi kata sandi di atas"
+                      required
+                      minLength={6}
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white transition-all font-mono"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-3 px-4 rounded-xl bg-puko-600 hover:bg-puko-700 disabled:opacity-50 text-white font-extrabold text-sm shadow-md shadow-puko-900/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
+                >
+                  {isLoading ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <span>Daftar & Kirim Kode Konfirmasi</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Link kembali ke Login */}
+              <div className="pt-3 border-t border-slate-100 text-center">
+                <p className="text-xs text-slate-600">
+                  Sudah memiliki akun?{' '}
+                  <button
+                    type="button"
+                    onClick={() => switchMode('LOGIN')}
+                    className="font-extrabold text-puko-700 hover:text-puko-800 hover:underline cursor-pointer"
+                  >
+                    Masuk di sini
+                  </button>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================== */}
+          {/* 3. OTP VERIFICATION FORM                                       */}
+          {/* ============================================================== */}
+          {mode === 'VERIFY_OTP' && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsForgotModalOpen(true);
-                    setRecoveryError('');
-                  }}
-                  className="text-xs text-puko-700 hover:text-puko-800 font-bold hover:underline cursor-pointer"
+                  onClick={() => switchMode('REGISTER')}
+                  className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                  title="Kembali"
                 >
-                  Lupa Password?
+                  <ArrowLeft className="w-4 h-4" />
                 </button>
-              </div>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                  <KeyRound className="w-4 h-4" />
+                <div>
+                  <h2 className="text-lg font-black text-slate-800 tracking-tight">
+                    Verifikasi Kode Email
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Masukkan kode 6-digit yang dikirimkan ke Gmail Anda
+                  </p>
                 </div>
-                <input
-                  type={showPin ? 'text' : 'password'}
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  placeholder="Masukkan password"
-                  required
-                  className={`w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-10 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white transition-all placeholder:text-slate-400 font-mono ${
-                    showPin ? 'tracking-normal font-bold' : 'tracking-widest font-bold'
+              </div>
+
+              {/* Target Email Badge */}
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-950 flex items-center gap-2.5">
+                <Mail className="w-4 h-4 text-emerald-600 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <span className="text-[10px] text-emerald-700 uppercase font-bold tracking-wider block">
+                    Kode dikirim ke:
+                  </span>
+                  <span className="font-bold text-xs truncate block font-sans">
+                    {targetEmail}
+                  </span>
+                </div>
+              </div>
+
+              <form onSubmit={handleVerifyOtpSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 text-center">
+                    Kode Konfirmasi (6 Digit)
+                  </label>
+                  <div className="relative max-w-[240px] mx-auto">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                      <KeyRound className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="text"
+                      maxLength={8}
+                      autoFocus
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value)}
+                      placeholder="123456"
+                      required
+                      className="w-full bg-slate-50 border-2 border-puko-500 text-slate-900 text-xl font-bold tracking-[0.4em] text-center rounded-2xl pl-8 pr-4 py-3 focus:outline-none focus:ring-4 focus:ring-puko-500/20 focus:bg-white font-mono shadow-xs"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500 text-center mt-2 leading-relaxed">
+                    Periksa kotak masuk atau folder spam di akun Gmail Anda.<br />
+                    <span className="text-slate-400">
+                      Anda bisa memasukkan 6 digit kode di atas, <strong>atau</strong> langsung klik link konfirmasi di email Anda (sistem akan otomatis mendeteksi dan masuk).
+                    </span>
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-3 px-4 rounded-xl bg-puko-600 hover:bg-puko-700 disabled:opacity-50 text-white font-extrabold text-sm shadow-md shadow-puko-900/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {isLoading ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Verifikasi & Masuk</span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Resend & Back controls */}
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-100 text-xs">
+                <button
+                  type="button"
+                  onClick={handleResendOtp}
+                  disabled={resendCooldown > 0 || isLoading}
+                  className={`font-bold transition-colors cursor-pointer ${
+                    resendCooldown > 0
+                      ? 'text-slate-400 cursor-not-allowed'
+                      : 'text-puko-700 hover:text-puko-800 hover:underline'
                   }`}
-                />
+                >
+                  {resendCooldown > 0
+                    ? `Kirim ulang (${resendCooldown}s)`
+                    : 'Kirim Ulang Kode'}
+                </button>
+
                 <button
                   type="button"
-                  onClick={() => setShowPin(!showPin)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-                  title={showPin ? 'Sembunyikan sandi' : 'Perlihatkan sandi'}
+                  onClick={() => switchMode('LOGIN')}
+                  className="text-slate-500 hover:text-slate-800 font-semibold cursor-pointer"
                 >
-                  {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  Kembali ke Halaman Masuk
                 </button>
               </div>
             </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-3 px-4 rounded-xl bg-puko-600 hover:bg-puko-700 text-white font-extrabold text-sm shadow-md shadow-puko-900/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
-            >
-              <span>Masuk</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </form>
+          )}
         </div>
 
         {/* Footer info */}
@@ -433,7 +646,7 @@ export const LoginPage = () => {
         </p>
       </div>
 
-      {/* Modal Pemulihan Password via Nomor WhatsApp */}
+      {/* Modal Pemulihan Password via Nomor HP */}
       {isForgotModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-4 animate-scaleUp">
@@ -444,12 +657,16 @@ export const LoginPage = () => {
                   <Phone className="w-4 h-4" />
                 </div>
                 <h3 className="font-extrabold text-slate-900 text-sm">
-                  Pemulihan Password via No. HP
+                  Pemulihan Kata Sandi
                 </h3>
               </div>
               <button
                 type="button"
-                onClick={closeForgotModal}
+                onClick={() => {
+                  setIsForgotModalOpen(false);
+                  setVerifiedUser(null);
+                  setRecoveryError('');
+                }}
                 className="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -464,7 +681,6 @@ export const LoginPage = () => {
               </div>
             )}
 
-            {/* Step 1: Input Phone Number */}
             {!verifiedUser ? (
               <form onSubmit={handleVerifyPhone} className="space-y-4">
                 <div>
@@ -472,7 +688,7 @@ export const LoginPage = () => {
                     Nomor WhatsApp Terdaftar
                   </label>
                   <p className="text-xs text-slate-500 mb-2">
-                    Masukkan nomor WhatsApp akun Owner/Kasir (contoh: <code>085652103647</code>) untuk verifikasi.
+                    Masukkan nomor WhatsApp akun Anda (contoh: <code>085652103647</code>) untuk verifikasi.
                   </p>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -492,7 +708,7 @@ export const LoginPage = () => {
                 <div className="flex items-center gap-2 pt-1">
                   <button
                     type="button"
-                    onClick={closeForgotModal}
+                    onClick={() => setIsForgotModalOpen(false)}
                     className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
                   >
                     Batal
@@ -506,14 +722,13 @@ export const LoginPage = () => {
                 </div>
               </form>
             ) : (
-              /* Step 2: Set New Password */
               <form onSubmit={handleResetPassword} className="space-y-4">
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                   <div>
                     <span className="font-bold">Nomor Terverifikasi!</span>
                     <p className="text-[11px] text-emerald-700">
-                      Akun: <strong>{verifiedUser.name}</strong> (@{verifiedUser.username})
+                      Akun: <strong>{verifiedUser.name}</strong> ({verifiedUser.role})
                     </p>
                   </div>
                 </div>

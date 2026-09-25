@@ -22,6 +22,7 @@ import {
   Coffee,
   LogOut,
   Phone,
+  Mail,
 } from 'lucide-react';
 import { ProductsPage } from '../Products';
 import { useSettings } from '../../context/SettingsContext';
@@ -352,10 +353,10 @@ export const SettingsPage = () => {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider">
-                  <th className="py-2.5 px-3 rounded-l-lg">Nama</th>
-                  <th className="py-2.5 px-3">Username</th>
-                  <th className="py-2.5 px-3">Password</th>
-                  <th className="py-2.5 px-3">Peran</th>
+                  <th className="py-2.5 px-3 rounded-l-lg">Nama & Akun</th>
+                  <th className="py-2.5 px-3">Identitas Login</th>
+                  <th className="py-2.5 px-3">Password / PIN</th>
+                  <th className="py-2.5 px-3">Peran & Akses</th>
                   <th className="py-2.5 px-3 text-right rounded-r-lg">Aksi</th>
                 </tr>
               </thead>
@@ -363,19 +364,33 @@ export const SettingsPage = () => {
                 {users.map((u) => {
                   const isPinShown = Boolean(revealedPins[u.id]);
                   const isSelf = currentUser?.id === u.id;
+                  const isOwner = u.role === 'ADMIN';
+
                   return (
                     <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="py-3 px-3">
                         <div>
                           <p className="font-bold text-slate-800 flex items-center gap-1.5">
                             {u.name}
+                            {isOwner && (
+                              <span className="text-[10px] bg-amber-100 text-amber-800 font-extrabold px-1.5 py-0.5 rounded border border-amber-200">
+                                Owner Utama
+                              </span>
+                            )}
                             {isSelf && (
                               <span className="text-[10px] bg-slate-100 text-slate-600 font-semibold px-1.5 py-0.5 rounded border border-slate-200">
                                 (Anda)
                               </span>
                             )}
                           </p>
-                          <p className="text-[11px] text-slate-400">ID: {u.id}</p>
+                          {isOwner ? (
+                            <p className="text-[11px] text-amber-800 font-semibold flex items-center gap-1 mt-0.5">
+                              <Mail className="w-3 h-3 text-amber-600" />
+                              {u.email || 'alpukatkocokpuko@gmail.com'}
+                            </p>
+                          ) : (
+                            <p className="text-[11px] text-slate-400">ID: {u.id}</p>
+                          )}
                         </div>
                       </td>
                       <td className="py-3 px-3 font-mono">
@@ -414,12 +429,12 @@ export const SettingsPage = () => {
                       <td className="py-3 px-3">
                         <span
                           className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
-                            u.role === 'ADMIN'
+                            isOwner
                               ? 'bg-amber-50 text-amber-800 border-amber-200'
                               : 'bg-emerald-50 text-emerald-800 border-emerald-200'
                           }`}
                         >
-                          {u.role === 'ADMIN' ? 'Admin' : 'Kasir'}
+                          {isOwner ? 'Owner (Akses Penuh)' : 'Kasir (Khusus POS)'}
                         </span>
                       </td>
                       <td className="py-3 px-3 text-right">
@@ -439,12 +454,12 @@ export const SettingsPage = () => {
                             variant="danger"
                             size="sm"
                             icon={Trash2}
-                            disabled={u.role === 'ADMIN' && users.filter((x) => x.role === 'ADMIN').length <= 1}
+                            disabled={isOwner}
                             onClick={() => handleDeleteUser(u)}
                             className="!px-2.5 !py-1 text-xs"
                             title={
-                              u.role === 'ADMIN' && users.filter((x) => x.role === 'ADMIN').length <= 1
-                                ? 'Admin utama tidak bisa dihapus'
+                              isOwner
+                                ? 'Akun Owner utama tidak dapat dihapus'
                                 : 'Hapus akun kasir ini'
                             }
                           >
@@ -707,10 +722,45 @@ export const SettingsPage = () => {
             </div>
           )}
 
+          {/* Information box for Cashier vs Owner */}
+          {editingUser?.role === 'ADMIN' ? (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-start gap-2">
+              <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+              <div>
+                <p className="font-bold">Akun Owner Utama</p>
+                <p className="text-[11px] text-amber-800">
+                  Email akun: <strong>alpukatkocokpuko@gmail.com</strong>. Memiliki kendali penuh atas semua data POS, menu, kasir, dan laporan.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 text-xs flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+              <div>
+                <p className="font-bold">Hak Akses Kasir Outlet</p>
+                <p className="text-[11px] text-emerald-800">
+                  Kasir hanya dapat mengakses Mesin POS, Riwayat Transaksi, dan Pengeluaran Operasional.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {editingUser?.role === 'ADMIN' && (
+            <div>
+              <Input
+                label="Email Login Owner"
+                value="alpukatkocokpuko@gmail.com"
+                readOnly
+                icon={Mail}
+                helperText="Email utama untuk masuk ke akun Owner"
+              />
+            </div>
+          )}
+
           <div>
             <Input
-              label="Nama"
-              placeholder="Contoh: Siti Rahma"
+              label={editingUser?.role === 'ADMIN' ? 'Nama Owner' : 'Nama Kasir'}
+              placeholder={editingUser?.role === 'ADMIN' ? 'Owner' : 'Contoh: Siti Rahma'}
               value={userFormData.name}
               onChange={(e) =>
                 setUserFormData((prev) => ({ ...prev, name: e.target.value }))
@@ -722,8 +772,8 @@ export const SettingsPage = () => {
 
           <div>
             <Input
-              label="Username"
-              placeholder="Contoh: siti"
+              label={editingUser?.role === 'ADMIN' ? 'Username Alternatif' : 'Username Kasir'}
+              placeholder={editingUser?.role === 'ADMIN' ? 'admin' : 'Contoh: kasir01'}
               value={userFormData.username}
               onChange={(e) =>
                 setUserFormData((prev) => ({
@@ -732,14 +782,19 @@ export const SettingsPage = () => {
                 }))
               }
               icon={Users}
+              helperText={
+                editingUser?.role === 'ADMIN'
+                  ? 'Owner dapat login menggunakan Email atau Username ini'
+                  : 'Digunakan oleh kasir untuk masuk di layar login'
+              }
               required
             />
           </div>
 
           <div>
             <Input
-              label="No. Telepon"
-              placeholder="Contoh: 081234567890"
+              label="No. Telepon / WhatsApp"
+              placeholder="Contoh: 085652103647"
               value={userFormData.phone}
               onChange={(e) =>
                 setUserFormData((prev) => ({
@@ -748,12 +803,13 @@ export const SettingsPage = () => {
                 }))
               }
               icon={Phone}
+              helperText="Digunakan untuk pemulihan password jika lupa"
             />
           </div>
 
           <div className="space-y-1.5">
             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
-              Password
+              {editingUser?.role === 'ADMIN' ? 'Password Owner' : 'PIN / Sandi Kasir'}
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -765,7 +821,7 @@ export const SettingsPage = () => {
                 onChange={(e) =>
                   setUserFormData((prev) => ({ ...prev, pin: e.target.value }))
                 }
-                placeholder="Contoh: 1234"
+                placeholder="Masukkan kata sandi / PIN"
                 required
                 className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl pl-10 pr-10 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 font-mono tracking-wider"
               />
@@ -781,6 +837,11 @@ export const SettingsPage = () => {
                 )}
               </button>
             </div>
+            <p className="text-[11px] text-slate-400">
+              {editingUser?.role === 'ADMIN'
+                ? 'Gunakan password yang kuat untuk keamanan toko Anda'
+                : 'PIN / sandi yang akan diketik kasir saat login'}
+            </p>
           </div>
 
           <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">

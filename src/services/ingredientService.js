@@ -1,6 +1,32 @@
+import { supabase } from './supabaseClient';
 import { storageService } from './storageService';
 
 const STORAGE_KEY = 'puko_ingredients_v1';
+
+// Sinkronisasi data bahan baku ke Supabase di latar belakang
+const syncToSupabase = async (ingredientsObj) => {
+  if (!ingredientsObj || typeof ingredientsObj !== 'object') return;
+  try {
+    const rows = Object.values(ingredientsObj).map((ing) => ({
+      id: String(ing.id),
+      name: ing.name,
+      category: ing.category || 'Bahan Utama',
+      unit: ing.unit || 'kg',
+      base_unit: ing.baseUnit || ing.unit || 'gram',
+      initial_stock: Number(ing.initialStock || ing.maxStock || 0),
+      current_stock: Number(ing.currentStock || 0),
+      max_stock: Number(ing.maxStock || 0),
+      min_stock_alert: Number(ing.minStockAlert || 0),
+      portion_per_cup: Number(ing.portionPerCup || 0),
+      icon: ing.icon || '📦',
+      color: ing.color || 'emerald',
+      updated_at: new Date().toISOString(),
+    }));
+    await supabase.from('ingredients').upsert(rows);
+  } catch (err) {
+    console.warn('[ingredientService] syncToSupabase error:', err);
+  }
+};
 
 export const DEFAULT_INGREDIENTS = {
   alpukat: {
@@ -50,19 +76,21 @@ export const DEFAULT_INGREDIENTS = {
   },
 };
 
+import { isToppingItem } from '../utils/productUtils';
+
 /**
  * Checks whether an ordered item consumes avocado shake ingredients
  */
 export const isAlpukatShakeItem = (item) => {
   if (!item) return false;
+  // If item is topping or extra, it doesn't consume the base avocado cup
+  if (isToppingItem(item)) return false;
+
   const category = (item.category || item.kategori || '').toLowerCase();
   const name = (item.nama || item.name || '').toLowerCase();
 
   // If item is specifically in Alpukat Kocok category
   if (category.includes('alpukat kocok')) return true;
-
-  // If item is topping or extra, it doesn't consume the base avocado cup
-  if (category.includes('topping')) return false;
 
   // Otherwise check if name contains alpukat
   return name.includes('alpukat');
@@ -151,11 +179,49 @@ export const ingredientService = {
   },
 
   /**
-   * Save ingredients to storage
+   * Save ingredients to storage and sync to Supabase
    */
   save(ingredients) {
     storageService.set(STORAGE_KEY, ingredients);
+    // Sinkronisasi otomatis ke Supabase di background
+    syncToSupabase(ingredients);
     return ingredients;
+  },
+
+  /**
+   * Ambil stok terbaru dari Supabase
+   */
+  async fetchFromSupabase() {
+    try {
+      const { data, error } = await supabase.from('ingredients').select('*');
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const current = this.getAll();
+        const updated = { ...current };
+        data.forEach((row) => {
+          const key = row.id;
+          updated[key] = {
+            ...(updated[key] || {}),
+            id: row.id,
+            name: row.name,
+            category: row.category,
+            unit: row.unit,
+            baseUnit: row.base_unit || row.unit,
+            initialStock: Number(row.initial_stock || row.max_stock || 0),
+            currentStock: Number(row.current_stock || 0),
+            maxStock: Number(row.max_stock || 0),
+            minStockAlert: Number(row.min_stock_alert || 0),
+            portionPerCup: Number(row.portion_per_cup || 0),
+            icon: row.icon || '🥑',
+            color: row.color || 'emerald',
+          };
+        });
+        storageService.set(STORAGE_KEY, updated);
+        return updated;
+      }
+    } catch (err) {
+      console.warn('[ingredientService] fetchFromSupabase error:', err);
+    }
+    return this.getAll();
   },
 
   /**
