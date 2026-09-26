@@ -117,7 +117,20 @@ export const Topbar = () => {
 
               {/* Actions: Admin can switch to Kasir or Logout; Kasir can ONLY Logout */}
               <div className="p-1 space-y-0.5">
-                {user?.role === 'ADMIN' && (
+                {/* Tombol Akses Mode Demo Langsung */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    navigate('/demo');
+                  }}
+                  className="w-full px-3 py-2 text-left rounded-xl hover:bg-amber-50 text-amber-900 flex items-center gap-2.5 transition-colors cursor-pointer text-xs font-bold"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>{user?.isDemo ? 'Menu Sandbox Demo' : 'Buka Mode Demo (Sandbox)'}</span>
+                </button>
+
+                {user?.role === 'ADMIN' && !user?.isDemo && (
                   <button
                     type="button"
                     onClick={() => {
@@ -141,7 +154,7 @@ export const Topbar = () => {
                   className="w-full px-3 py-2 text-left rounded-xl hover:bg-rose-50 text-rose-600 flex items-center gap-2.5 transition-colors cursor-pointer text-xs font-bold"
                 >
                   <LogOut className="w-4 h-4 text-rose-500 shrink-0" />
-                  <span>Keluar (Logout)</span>
+                  <span>{user?.isDemo ? 'Keluar Mode Demo' : 'Keluar (Logout)'}</span>
                 </button>
               </div>
             </div>

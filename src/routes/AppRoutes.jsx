@@ -10,12 +10,14 @@ import { SettingsPage } from '../pages/Settings';
 import { LoginPage } from '../pages/Auth/Login';
 import { VerifyEmailPage } from '../pages/Auth/VerifyEmail';
 import { AuthCallback } from '../pages/Auth/AuthCallback';
+import { DemoPage } from '../pages/Demo';
 import { ProtectedRoute } from './ProtectedRoute';
 
 export const AppRoutes = () => {
   return (
     <Routes>
-      {/* Public Routes: Login, Verify Email OTP, & Auth Callback */}
+      {/* Public Routes: Login, Demo, Verify Email OTP, & Auth Callback */}
+      <Route path="/demo" element={<DemoPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/auth/callback" element={<AuthCallback />} />

@@ -88,6 +88,16 @@ export const expenseService = {
     const storeId = storeService.getActiveStoreId();
     const storageKey = getStorageKey();
 
+    // Mode Demo: 100% Sandbox LocalStorage (TIDAK memanggil Supabase)
+    if (storeService.isDemoStore(storeId)) {
+      let expenses = storageService.get(storageKey);
+      if (!expenses || !Array.isArray(expenses) || expenses.length === 0) {
+        expenses = INITIAL_EXPENSES.map((e) => ({ ...e, store_id: storeId, storeId: storeId }));
+        storageService.set(storageKey, expenses);
+      }
+      return expenses.map(mapFromDB).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    }
+
     try {
       let { data, error } = await supabase
         .from('expenses')
@@ -158,18 +168,20 @@ export const expenseService = {
     };
     const dbPayload = mapToDB(newExpense);
 
-    try {
-      const { error } = await supabase.from('expenses').insert([dbPayload]);
-      if (error) {
-        if (error.message?.includes('store_id')) {
-          const { store_id, ...withoutStore } = dbPayload;
-          await supabase.from('expenses').insert([withoutStore]);
-        } else {
-          console.warn('[expenseService] create error di Supabase:', error);
+    if (!storeService.isDemoStore(storeId)) {
+      try {
+        const { error } = await supabase.from('expenses').insert([dbPayload]);
+        if (error) {
+          if (error.message?.includes('store_id')) {
+            const { store_id, ...withoutStore } = dbPayload;
+            await supabase.from('expenses').insert([withoutStore]);
+          } else {
+            console.warn('[expenseService] create error di Supabase:', error);
+          }
         }
+      } catch (err) {
+        console.warn('[expenseService] create error:', err);
       }
-    } catch (err) {
-      console.warn('[expenseService] create error:', err);
     }
 
     const list = await this.getAll();
@@ -182,6 +194,7 @@ export const expenseService = {
    * Edit pengeluaran yang ada
    */
   async update(id, data) {
+    const storeId = storeService.getActiveStoreId();
     const list = await this.getAll();
     const index = list.findIndex((item) => item.id === id);
     if (index === -1) {
@@ -196,22 +209,24 @@ export const expenseService = {
     };
     const dbPayload = mapToDB(updatedExpense);
 
-    try {
-      const { error } = await supabase
-        .from('expenses')
-        .update(dbPayload)
-        .eq('id', id);
+    if (!storeService.isDemoStore(storeId)) {
+      try {
+        const { error } = await supabase
+          .from('expenses')
+          .update(dbPayload)
+          .eq('id', id);
 
-      if (error) {
-        if (error.message?.includes('store_id')) {
-          const { store_id, ...withoutStore } = dbPayload;
-          await supabase.from('expenses').update(withoutStore).eq('id', id);
-        } else {
-          console.warn('[expenseService] update error di Supabase:', error);
+        if (error) {
+          if (error.message?.includes('store_id')) {
+            const { store_id, ...withoutStore } = dbPayload;
+            await supabase.from('expenses').update(withoutStore).eq('id', id);
+          } else {
+            console.warn('[expenseService] update error di Supabase:', error);
+          }
         }
+      } catch (err) {
+        console.warn('[expenseService] update error:', err);
       }
-    } catch (err) {
-      console.warn('[expenseService] update error:', err);
     }
 
     list[index] = updatedExpense;
@@ -223,15 +238,18 @@ export const expenseService = {
    * Hapus pengeluaran
    */
   async delete(id) {
-    try {
-      const { error } = await supabase
-        .from('expenses')
-        .delete()
-        .eq('id', id);
+    const storeId = storeService.getActiveStoreId();
+    if (!storeService.isDemoStore(storeId)) {
+      try {
+        const { error } = await supabase
+          .from('expenses')
+          .delete()
+          .eq('id', id);
 
-      if (error) console.warn('[expenseService] delete error di Supabase:', error);
-    } catch (err) {
-      console.warn('[expenseService] delete error:', err);
+        if (error) console.warn('[expenseService] delete error di Supabase:', error);
+      } catch (err) {
+        console.warn('[expenseService] delete error:', err);
+      }
     }
 
     const list = await this.getAll();
@@ -245,10 +263,13 @@ export const expenseService = {
    */
   async deleteExpenses(ids) {
     if (!ids || ids.length === 0) return true;
-    try {
-      await supabase.from('expenses').delete().in('id', ids);
-    } catch (err) {
-      console.warn('[expenseService] deleteExpenses error di Supabase:', err);
+    const storeId = storeService.getActiveStoreId();
+    if (!storeService.isDemoStore(storeId)) {
+      try {
+        await supabase.from('expenses').delete().in('id', ids);
+      } catch (err) {
+        console.warn('[expenseService] deleteExpenses error di Supabase:', err);
+      }
     }
     const list = await this.getAll();
     const filtered = list.filter((item) => !ids.includes(item.id));
@@ -261,10 +282,12 @@ export const expenseService = {
    */
   async clearHistory() {
     const storeId = storeService.getActiveStoreId();
-    try {
-      await supabase.from('expenses').delete().eq('store_id', storeId);
-    } catch (err) {
-      console.warn('[expenseService] clearHistory error di Supabase:', err);
+    if (!storeService.isDemoStore(storeId)) {
+      try {
+        await supabase.from('expenses').delete().eq('store_id', storeId);
+      } catch (err) {
+        console.warn('[expenseService] clearHistory error di Supabase:', err);
+      }
     }
     storageService.set(getStorageKey(), []);
     return true;

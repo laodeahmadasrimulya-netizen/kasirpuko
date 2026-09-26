@@ -11,6 +11,7 @@ const getStorageKey = () => {
 const syncToSupabase = async (ingredientsObj) => {
   if (!ingredientsObj || typeof ingredientsObj !== 'object') return;
   const storeId = storeService.getActiveStoreId();
+  if (storeService.isDemoStore(storeId)) return;
   try {
     const rows = Object.values(ingredientsObj).map((ing) => ({
       id: storeId === DEFAULT_STORE_ID ? String(ing.id) : `${storeId}_${ing.id}`,
@@ -205,6 +206,11 @@ export const ingredientService = {
   async fetchFromSupabase() {
     const storeId = storeService.getActiveStoreId();
     const storageKey = getStorageKey();
+
+    if (storeService.isDemoStore(storeId)) {
+      return this.getAll();
+    }
+
     try {
       let { data, error } = await supabase.from('ingredients').select('*').eq('store_id', storeId);
       if (error && (error.message?.includes('store_id') || error.code === '42703')) {

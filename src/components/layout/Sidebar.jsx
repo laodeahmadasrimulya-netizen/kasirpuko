@@ -104,6 +104,24 @@ export const Sidebar = () => {
         })}
       </nav>
 
+      {/* Tombol Akses Cepat Mode Demo */}
+      <div className="px-3 pb-2">
+        <NavLink
+          to="/demo"
+          className={({ isActive }) => `
+            w-full py-2.5 px-3 rounded-xl border text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer
+            ${
+              user?.isDemo
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-xs'
+                : 'bg-slate-800/50 hover:bg-amber-500/20 text-slate-300 hover:text-amber-300 border-slate-700/70 hover:border-amber-400/40'
+            }
+          `}
+        >
+          <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span>{user?.isDemo ? 'Mode Sandbox Aktif' : 'Buka Mode Demo'}</span>
+        </NavLink>
+      </div>
+
       {/* Footer / User status & Logout card */}
       <div className="p-3.5 m-3 rounded-2xl bg-slate-800/60 border border-slate-700/60 space-y-3">
         <div className="flex items-center gap-2.5">

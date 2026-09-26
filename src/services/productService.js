@@ -65,6 +65,21 @@ export const productService = {
     const storeId = storeService.getActiveStoreId();
     const storageKey = getStorageKey();
 
+    // Mode Demo: 100% Sandbox LocalStorage (TIDAK AKAN memanggil Supabase)
+    if (storeService.isDemoStore(storeId)) {
+      let localProducts = storageService.get(storageKey);
+      if (!localProducts || !Array.isArray(localProducts) || localProducts.length === 0) {
+        localProducts = DUMMY_PRODUCTS.map((p, idx) => ({
+          ...p,
+          id: `demo-p-${idx + 1}`,
+          store_id: storeId,
+          storeId: storeId,
+        }));
+        storageService.set(storageKey, localProducts);
+      }
+      return localProducts.map(mapFromDB);
+    }
+
     try {
       let { data, error } = await supabase
         .from('products')
@@ -137,18 +152,21 @@ export const productService = {
    * Toggle ketersediaan produk (Tersedia / Habis)
    */
   async toggleAvailability(id) {
+    const storeId = storeService.getActiveStoreId();
     const all = await this.getAll();
     const target = all.find((p) => p.id === id);
     const newStatus = target ? !target.isAvailable : false;
 
-    // Update di Supabase
-    try {
-      await supabase
-        .from('products')
-        .update({ is_available: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', id);
-    } catch (err) {
-      console.warn('[productService] toggleAvailability error di Supabase:', err);
+    // Update di Supabase hanya jika bukan demo
+    if (!storeService.isDemoStore(storeId)) {
+      try {
+        await supabase
+          .from('products')
+          .update({ is_available: newStatus, updated_at: new Date().toISOString() })
+          .eq('id', id);
+      } catch (err) {
+        console.warn('[productService] toggleAvailability error di Supabase:', err);
+      }
     }
 
     // Update di cache lokal
@@ -163,25 +181,28 @@ export const productService = {
    * Edit rincian produk
    */
   async update(id, data) {
+    const storeId = storeService.getActiveStoreId();
     const dbPayload = mapToDB({ ...data, id });
 
-    // Update di Supabase
-    try {
-      const { error } = await supabase
-        .from('products')
-        .update(dbPayload)
-        .eq('id', id);
+    // Update di Supabase hanya jika bukan demo
+    if (!storeService.isDemoStore(storeId)) {
+      try {
+        const { error } = await supabase
+          .from('products')
+          .update(dbPayload)
+          .eq('id', id);
 
-      if (error) {
-        if (error.message?.includes('store_id')) {
-          const { store_id, ...withoutStore } = dbPayload;
-          await supabase.from('products').update(withoutStore).eq('id', id);
-        } else {
-          console.warn('[productService] update error di Supabase:', error);
+        if (error) {
+          if (error.message?.includes('store_id')) {
+            const { store_id, ...withoutStore } = dbPayload;
+            await supabase.from('products').update(withoutStore).eq('id', id);
+          } else {
+            console.warn('[productService] update error di Supabase:', error);
+          }
         }
+      } catch (err) {
+        console.warn('[productService] update error:', err);
       }
-    } catch (err) {
-      console.warn('[productService] update error:', err);
     }
 
     // Update di cache lokal
@@ -212,22 +233,24 @@ export const productService = {
     };
     const dbPayload = mapToDB(newProduct);
 
-    // Insert ke Supabase
-    try {
-      const { error } = await supabase
-        .from('products')
-        .insert([dbPayload]);
+    // Insert ke Supabase hanya jika bukan demo
+    if (!storeService.isDemoStore(storeId)) {
+      try {
+        const { error } = await supabase
+          .from('products')
+          .insert([dbPayload]);
 
-      if (error) {
-        if (error.message?.includes('store_id')) {
-          const { store_id, ...withoutStore } = dbPayload;
-          await supabase.from('products').insert([withoutStore]);
-        } else {
-          console.warn('[productService] create error di Supabase:', error);
+        if (error) {
+          if (error.message?.includes('store_id')) {
+            const { store_id, ...withoutStore } = dbPayload;
+            await supabase.from('products').insert([withoutStore]);
+          } else {
+            console.warn('[productService] create error di Supabase:', error);
+          }
         }
+      } catch (err) {
+        console.warn('[productService] create error:', err);
       }
-    } catch (err) {
-      console.warn('[productService] create error:', err);
     }
 
     // Update cache lokal
@@ -242,13 +265,17 @@ export const productService = {
    * Hapus produk
    */
   async delete(id) {
-    try {
-      await supabase
-        .from('products')
-        .delete()
-        .eq('id', id);
-    } catch (err) {
-      console.warn('[productService] delete error di Supabase:', err);
+    const storeId = storeService.getActiveStoreId();
+    // Delete di Supabase hanya jika bukan demo
+    if (!storeService.isDemoStore(storeId)) {
+      try {
+        await supabase
+          .from('products')
+          .delete()
+          .eq('id', id);
+      } catch (err) {
+        console.warn('[productService] delete error di Supabase:', err);
+      }
     }
 
     const all = await this.getAll();
@@ -261,8 +288,15 @@ export const productService = {
    * Reset ke data bawaan
    */
   async reset() {
+    const storeId = storeService.getActiveStoreId();
     const storageKey = getStorageKey();
-    storageService.set(storageKey, DUMMY_PRODUCTS);
-    return DUMMY_PRODUCTS.map(mapFromDB);
+    const resetProducts = DUMMY_PRODUCTS.map((p, idx) => ({
+      ...p,
+      id: storeService.isDemoStore(storeId) ? `demo-p-${idx + 1}` : p.id,
+      store_id: storeId,
+      storeId: storeId,
+    }));
+    storageService.set(storageKey, resetProducts);
+    return resetProducts.map(mapFromDB);
   },
 };

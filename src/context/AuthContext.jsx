@@ -1,11 +1,28 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { storeService, DEFAULT_STORE_ID } from '../services/storeService';
+import { storeService, DEFAULT_STORE_ID, DEMO_STORE_ID } from '../services/storeService';
+import { demoService } from '../services/demoService';
 
 const STORAGE_KEY = 'puko_auth_user';
 const USERS_STORAGE_KEY = 'puko_users_list';
 
 export const OWNER_EMAIL = 'alpukatkocokpuko@gmail.com';
+
+export const DEMO_USER = {
+  id: 'usr-demo',
+  storeId: DEMO_STORE_ID,
+  store_id: DEMO_STORE_ID,
+  username: 'demo',
+  email: 'demo@puko.id',
+  pin: '1234',
+  name: 'Tamu Demo',
+  role: 'ADMIN',
+  phone: '085652103647',
+  avatar: '🥑',
+  roleLabel: 'Mode Demo (Akses Penuh)',
+  roleBadgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30',
+  isDemo: true,
+};
 
 export const DEFAULT_USERS = [
   {
@@ -1198,9 +1215,50 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
+   * Masuk ke Mode Demo Sandbox
+   */
+  const enterDemoMode = () => {
+    storeService.setActiveStoreId(DEMO_STORE_ID);
+    demoService.ensureDemoData();
+    setUser(DEMO_USER);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEMO_USER));
+    } catch {
+      // ignore
+    }
+    return DEMO_USER;
+  };
+
+  /**
+   * Reset data demo ke kondisi awal
+   */
+  const resetDemo = () => {
+    demoService.resetDemoData();
+    return true;
+  };
+
+  /**
+   * Keluar dari mode demo
+   */
+  const exitDemoMode = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+    storeService.setActiveStoreId(DEFAULT_STORE_ID);
+    setUser(null);
+  };
+
+  /**
    * Logout user
    */
   const logout = async () => {
+    if (user?.isDemo) {
+      exitDemoMode();
+      return;
+    }
+
     try {
       await supabase.auth.signOut();
     } catch (e) {
@@ -1218,6 +1276,10 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: Boolean(user),
     isAdmin: user?.role === 'ADMIN',
     isKasir: user?.role === 'KASIR',
+    isDemo: Boolean(user?.isDemo),
+    enterDemoMode,
+    resetDemo,
+    exitDemoMode,
     ownerEmail: OWNER_EMAIL,
     login,
     signUpWithEmail,

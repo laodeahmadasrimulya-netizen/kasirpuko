@@ -395,6 +395,20 @@ export const transactionService = {
     const storeId = storeService.getActiveStoreId();
     const storageKey = getStorageKey();
 
+    // Mode Demo: 100% Sandbox LocalStorage (TIDAK AKAN memanggil Supabase)
+    if (storeService.isDemoStore(storeId)) {
+      let list = storageService.get(storageKey);
+      if (!list || !Array.isArray(list) || list.length === 0) {
+        list = INITIAL_TRANSACTIONS.map((tx) => ({
+          ...tx,
+          store_id: storeId,
+          storeId: storeId,
+        }));
+        storageService.set(storageKey, list);
+      }
+      return list.map(mapFromDB);
+    }
+
     try {
       let { data, error } = await supabase
         .from('transactions')
@@ -454,19 +468,21 @@ export const transactionService = {
     };
     const dbPayload = mapToDB(newTx);
 
-    // Simpan ke Supabase
-    try {
-      const { error } = await supabase.from('transactions').insert([dbPayload]);
-      if (error) {
-        if (error.message?.includes('store_id')) {
-          const { store_id, ...withoutStore } = dbPayload;
-          await supabase.from('transactions').insert([withoutStore]);
-        } else {
-          console.warn('[transactionService] create error di Supabase:', error);
+    // Simpan ke Supabase hanya jika BUKAN mode demo
+    if (!storeService.isDemoStore(storeId)) {
+      try {
+        const { error } = await supabase.from('transactions').insert([dbPayload]);
+        if (error) {
+          if (error.message?.includes('store_id')) {
+            const { store_id, ...withoutStore } = dbPayload;
+            await supabase.from('transactions').insert([withoutStore]);
+          } else {
+            console.warn('[transactionService] create error di Supabase:', error);
+          }
         }
+      } catch (err) {
+        console.warn('[transactionService] create error:', err);
       }
-    } catch (err) {
-      console.warn('[transactionService] create error:', err);
     }
 
     // Simpan ke cache lokal
@@ -507,10 +523,14 @@ export const transactionService = {
    */
   async deleteTransactions(ids) {
     if (!ids || ids.length === 0) return true;
-    try {
-      await supabase.from('transactions').delete().in('id', ids);
-    } catch (err) {
-      console.warn('[transactionService] deleteTransactions error di Supabase:', err);
+    const storeId = storeService.getActiveStoreId();
+
+    if (!storeService.isDemoStore(storeId)) {
+      try {
+        await supabase.from('transactions').delete().in('id', ids);
+      } catch (err) {
+        console.warn('[transactionService] deleteTransactions error di Supabase:', err);
+      }
     }
     const current = storageService.get(getStorageKey(), []);
     const updated = current.filter((t) => !ids.includes(t.id));
@@ -523,14 +543,17 @@ export const transactionService = {
    */
   async clearHistory() {
     const storeId = storeService.getActiveStoreId();
-    try {
-      if (storeId === DEFAULT_STORE_ID) {
-        await supabase.from('transactions').delete().or(`store_id.eq.${storeId},store_id.is.null`);
-      } else {
-        await supabase.from('transactions').delete().eq('store_id', storeId);
+
+    if (!storeService.isDemoStore(storeId)) {
+      try {
+        if (storeId === DEFAULT_STORE_ID) {
+          await supabase.from('transactions').delete().or(`store_id.eq.${storeId},store_id.is.null`);
+        } else {
+          await supabase.from('transactions').delete().eq('store_id', storeId);
+        }
+      } catch (err) {
+        console.warn('[transactionService] clearHistory error di Supabase:', err);
       }
-    } catch (err) {
-      console.warn('[transactionService] clearHistory error di Supabase:', err);
     }
     storageService.set(getStorageKey(), []);
     return true;

@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { BottomNav } from './BottomNav';
 import { ReceiptModal } from '../common/ReceiptModal';
+import { DemoBanner } from '../common/DemoBanner';
 import { useTransactions } from '../../context/TransactionContext';
 
 export const MainLayout = () => {
@@ -16,6 +17,9 @@ export const MainLayout = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 pb-16 lg:pb-0">
+        {/* Banner Mode Demo jika aktif */}
+        <DemoBanner />
+
         {/* Top Navbar */}
         <Topbar />
 

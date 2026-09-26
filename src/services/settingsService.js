@@ -48,6 +48,25 @@ export const settingsService = {
     const storeId = storeService.getActiveStoreId();
     const storageKey = getStorageKey();
 
+    // Mode Demo: 100% Sandbox LocalStorage
+    if (storeService.isDemoStore(storeId)) {
+      let settings = storageService.get(storageKey);
+      if (!settings) {
+        settings = {
+          ...DEFAULT_SETTINGS,
+          storeName: 'PUKO (Demo Kasir)',
+          tagline: 'Alpukat Kocok No Serat No Pahit (Sandbox)',
+          branch: 'Outlet Demo / Uji Coba',
+          address: 'Jl. Contoh Demo No. 8, Kendari',
+          phone: '085652103647',
+          cashierName: 'Kasir Demo (Dita)',
+          receiptFooter: 'Terima kasih telah mencoba Kasir PUKO! (Struk Uji Coba)',
+        };
+        storageService.set(storageKey, settings);
+      }
+      return { ...DEFAULT_SETTINGS, ...settings };
+    }
+
     let storeInfo = null;
     try {
       storeInfo = await storeService.getStore(storeId);
@@ -95,6 +114,12 @@ export const settingsService = {
     const storageKey = getStorageKey();
     const current = await this.get();
     const updated = { ...current, ...newData };
+
+    // Mode Demo: simpan ke storage lokal saja
+    if (storeService.isDemoStore(storeId)) {
+      storageService.set(storageKey, updated);
+      return updated;
+    }
 
     // Update profil toko di storeService
     if (newData.storeName !== undefined || newData.tagline !== undefined || newData.phone !== undefined || newData.address !== undefined) {

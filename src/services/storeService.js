@@ -3,13 +3,30 @@ import { storageService } from './storageService';
 import { DUMMY_PRODUCTS } from '../data/dummyProducts';
 
 export const DEFAULT_STORE_ID = 'store_default';
+export const DEMO_STORE_ID = 'store_demo_sandbox';
 const ACTIVE_STORE_KEY = 'puko_active_store_id';
 
 export const storeService = {
   /**
+   * Cek apakah storeId adalah toko demo
+   */
+  isDemoStore(storeId) {
+    return storeId === DEMO_STORE_ID;
+  },
+
+  /**
+   * Cek apakah aplikasi sedang dalam mode demo
+   */
+  isDemoMode(user = null) {
+    if (user?.isDemo) return true;
+    return this.getActiveStoreId(user) === DEMO_STORE_ID;
+  },
+
+  /**
    * Mendapatkan Store ID yang sedang aktif
    */
   getActiveStoreId(user = null) {
+    if (user?.isDemo) return DEMO_STORE_ID;
     if (user?.storeId) return user.storeId;
     if (user?.store_id) return user.store_id;
 
@@ -42,6 +59,17 @@ export const storeService = {
    * Mengambil data toko berdasarkan storeId
    */
   async getStore(storeId = DEFAULT_STORE_ID) {
+    if (storeId === DEMO_STORE_ID) {
+      return {
+        id: DEMO_STORE_ID,
+        name: 'PUKO (Demo Sandbox)',
+        tagline: 'Mode Coba Bebas - Tidak Merubah Toko Asli',
+        phone: '085652103647',
+        address: 'Kendari (Outlet Uji Coba)',
+        is_demo: true,
+      };
+    }
+
     try {
       const { data, error } = await supabase
         .from('stores')
