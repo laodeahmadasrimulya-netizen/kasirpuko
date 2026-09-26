@@ -596,11 +596,10 @@ export const TransactionsPage = () => {
           </Button>
 
           <Button
-            variant="outline"
             size="sm"
             onClick={handleExportExcel}
             icon={FileSpreadsheet}
-            className="font-bold border-slate-300 text-slate-700 hover:bg-slate-50 shadow-xs"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm"
           >
             Ekspor Excel
           </Button>
@@ -933,11 +932,10 @@ export const TransactionsPage = () => {
               </Button>
 
               <Button
-                variant="outline"
                 size="sm"
                 onClick={handleExportExcel}
                 icon={FileSpreadsheet}
-                className="font-bold border-slate-300 text-slate-700 hover:bg-slate-50 flex-1 sm:flex-none shadow-xs"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm flex-1 sm:flex-none"
               >
                 Ekspor Excel
               </Button>

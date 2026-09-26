@@ -54,6 +54,7 @@ export const CartPanel = () => {
   const [activeItemNoteModal, setActiveItemNoteModal] = useState(null);
   const [noteText, setNoteText] = useState('');
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [initialPaymentMethod, setInitialPaymentMethod] = useState('TUNAI');
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -69,13 +70,14 @@ export const CartPanel = () => {
     setActiveItemNoteModal(null);
   };
 
-  // Open payment modal
-  const handleOpenPayment = () => {
+  // Open payment modal (instant switch to TUNAI or QRIS)
+  const handleOpenPayment = (method = 'TUNAI') => {
     if (isCartEmpty) {
       setErrorMessage('Keranjang masih kosong, silakan pilih menu terlebih dahulu.');
       return;
     }
     setErrorMessage('');
+    setInitialPaymentMethod(method);
     setIsPaymentModalOpen(true);
   };
 
@@ -333,18 +335,30 @@ export const CartPanel = () => {
             </div>
           )}
 
-          {/* Action Button */}
-          <Button
-            variant="primary"
-            size="lg"
-            fullWidth
-            disabled={isCartEmpty}
-            onClick={handleOpenPayment}
-            className="shadow-lg shadow-puko-700/25 bg-puko-600 hover:bg-puko-700 py-3.5 text-base font-extrabold tracking-wide cursor-pointer"
-          >
-            <span>Pilih Pembayaran • {formatIDR(total)}</span>
-            <ArrowRight className="w-5 h-5 ml-2" />
-          </Button>
+          {/* Action Buttons: Quick QRIS or Standard Payment */}
+          <div className="space-y-2">
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              disabled={isCartEmpty}
+              onClick={() => handleOpenPayment('TUNAI')}
+              className="shadow-lg shadow-puko-700/25 bg-puko-600 hover:bg-puko-700 py-3.5 text-base font-extrabold tracking-wide cursor-pointer"
+            >
+              <span>Pilih Pembayaran • {formatIDR(total)}</span>
+              <ArrowRight className="w-5 h-5 ml-2" />
+            </Button>
+
+            <button
+              type="button"
+              disabled={isCartEmpty}
+              onClick={() => handleOpenPayment('QRIS')}
+              className="w-full py-2 px-3 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <QrCode className="w-4 h-4 text-emerald-700" />
+              <span>Tampilkan QRIS Instan</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -374,15 +388,27 @@ export const CartPanel = () => {
               </div>
             </button>
 
-            {/* Right side: Direct Action Button "Pilih Pembayaran" */}
-            <button
-              type="button"
-              onClick={handleOpenPayment}
-              className="px-4 py-2.5 rounded-xl bg-puko-500 hover:bg-puko-400 active:scale-95 text-white font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-lg shadow-puko-950/40 transition-all shrink-0 cursor-pointer"
-            >
-              <span>Pilih Pembayaran</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            {/* Right side: Action Buttons "QRIS" & "Bayar" */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleOpenPayment('QRIS')}
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-emerald-400 font-extrabold text-xs flex items-center gap-1.5 border border-slate-700 transition-all cursor-pointer"
+                title="Langsung Tampilkan QRIS"
+              >
+                <QrCode className="w-4 h-4 text-emerald-400" />
+                <span>QRIS</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleOpenPayment('TUNAI')}
+                className="px-3.5 py-2 rounded-xl bg-puko-500 hover:bg-puko-400 active:scale-95 text-white font-black text-xs sm:text-sm flex items-center gap-1 shadow-lg shadow-puko-950/40 transition-all cursor-pointer"
+              >
+                <span>Bayar</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -472,21 +498,35 @@ export const CartPanel = () => {
                 </div>
               </div>
 
-              {/* Action Button */}
-              <Button
-                variant="primary"
-                size="lg"
-                fullWidth
-                disabled={isCartEmpty}
-                onClick={() => {
-                  setIsMobileCartOpen(false);
-                  handleOpenPayment();
-                }}
-                className="shadow-lg shadow-puko-700/25 bg-puko-600 hover:bg-puko-700 py-3 text-sm font-extrabold cursor-pointer"
-              >
-                <span>Lanjut ke Pembayaran • {formatIDR(total)}</span>
-                <ArrowRight className="w-4 h-4 ml-1.5" />
-              </Button>
+              {/* Action Buttons inside Mobile Drawer */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={isCartEmpty}
+                  onClick={() => {
+                    setIsMobileCartOpen(false);
+                    handleOpenPayment('QRIS');
+                  }}
+                  className="py-3 px-2 rounded-xl bg-slate-800 text-emerald-400 font-extrabold text-xs flex items-center justify-center gap-1.5 border border-slate-700 active:scale-95 transition-all cursor-pointer"
+                >
+                  <QrCode className="w-4 h-4" />
+                  <span>Bayar QRIS</span>
+                </button>
+
+                <Button
+                  variant="primary"
+                  size="lg"
+                  disabled={isCartEmpty}
+                  onClick={() => {
+                    setIsMobileCartOpen(false);
+                    handleOpenPayment('TUNAI');
+                  }}
+                  className="shadow-lg shadow-puko-700/25 bg-puko-600 hover:bg-puko-700 py-3 text-xs font-extrabold cursor-pointer"
+                >
+                  <span>Bayar Tunai</span>
+                  <ArrowRight className="w-4 h-4 ml-1" />
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -504,6 +544,7 @@ export const CartPanel = () => {
         customerName={customerName}
         totalItemsCount={totalItemsCount}
         onConfirmPayment={handleConfirmPayment}
+        initialMethod={initialPaymentMethod}
       />
     </>
   );

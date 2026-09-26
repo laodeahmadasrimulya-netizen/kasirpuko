@@ -52,11 +52,11 @@ export const AppRoutes = () => {
           }
         />
 
-        {/* Admin Exclusive: Dashboard, Menu Management, Transaction History, Settings */}
+        {/* Beranda Dashboard: Accessible by ADMIN and KASIR */}
         <Route
           path="/dashboard"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN']}>
+            <ProtectedRoute allowedRoles={['ADMIN', 'KASIR']}>
               <DashboardPage />
             </ProtectedRoute>
           }
