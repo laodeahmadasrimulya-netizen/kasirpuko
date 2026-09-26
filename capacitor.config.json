@@ -1,0 +1,11 @@
+{
+  "appId": "com.puko.pos",
+  "appName": "PUKO POS",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}
