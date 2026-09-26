@@ -62,7 +62,7 @@ export const storeService = {
     if (storeId === DEMO_STORE_ID) {
       return {
         id: DEMO_STORE_ID,
-        name: 'PUKO (Demo Sandbox)',
+        name: 'PUKO (mode demo)',
         tagline: 'Mode Coba Bebas - Tidak Merubah Toko Asli',
         phone: '085652103647',
         address: 'Kendari (Outlet Uji Coba)',

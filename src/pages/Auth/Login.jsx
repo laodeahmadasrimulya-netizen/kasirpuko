@@ -317,18 +317,6 @@ export const LoginPage = () => {
                     </>
                   )}
                 </button>
-
-                {/* Tombol Akses Cepat Mode Demo */}
-                <div className="pt-1.5">
-                  <button
-                    type="button"
-                    onClick={() => navigate('/demo')}
-                    className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-50 via-emerald-50 to-amber-50 hover:from-amber-100 hover:to-emerald-100 text-slate-800 border border-amber-300 font-extrabold text-xs shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
-                  >
-                    <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span>Coba Demo Kasir &bull; Akses Bebas Tanpa Login</span>
-                  </button>
-                </div>
               </form>
 
               {/* Link ke Pendaftaran */}

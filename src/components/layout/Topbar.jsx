@@ -53,7 +53,7 @@ export const Topbar = () => {
           </div>
           <div>
             <h1 className="font-extrabold text-sm text-slate-800 leading-tight">
-              {settings?.storeName || 'PUKO'}
+              {user?.isDemo ? 'PUKO (mode demo)' : (settings?.storeName || 'PUKO')}
             </h1>
             <p className="text-[10px] text-slate-500 font-medium">
               No Serat No Pahit
@@ -117,19 +117,6 @@ export const Topbar = () => {
 
               {/* Actions: Admin can switch to Kasir or Logout; Kasir can ONLY Logout */}
               <div className="p-1 space-y-0.5">
-                {/* Tombol Akses Mode Demo Langsung */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    navigate('/demo');
-                  }}
-                  className="w-full px-3 py-2 text-left rounded-xl hover:bg-amber-50 text-amber-900 flex items-center gap-2.5 transition-colors cursor-pointer text-xs font-bold"
-                >
-                  <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>{user?.isDemo ? 'Menu Sandbox Demo' : 'Buka Mode Demo (Sandbox)'}</span>
-                </button>
-
                 {user?.role === 'ADMIN' && !user?.isDemo && (
                   <button
                     type="button"

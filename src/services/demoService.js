@@ -201,13 +201,13 @@ export const DEMO_EXPENSES_SEED = [
 
 export const DEMO_SETTINGS_SEED = {
   ...DEFAULT_SETTINGS,
-  storeName: 'PUKO (Demo Kasir)',
-  tagline: 'Alpukat Kocok No Serat No Pahit (Sandbox)',
-  branch: 'Outlet Demo / Uji Coba',
+  storeName: 'PUKO (mode demo)',
+  tagline: 'Alpukat Kocok No Serat No Pahit',
+  branch: 'Outlet Demo',
   address: 'Jl. Contoh Demo No. 8, Kendari',
   phone: '085652103647',
   cashierName: 'Kasir Demo (Dita)',
-  receiptFooter: 'Terima kasih telah mencoba Kasir PUKO! (Struk Uji Coba)',
+  receiptFooter: 'Terima kasih telah mencoba Kasir PUKO! (Mode Demo)',
   taxRate: 0,
   serviceRate: 0,
   enableSound: true,
