@@ -3,7 +3,10 @@
   "appName": "PUKO POS",
   "webDir": "dist",
   "server": {
-    "androidScheme": "https"
+    "url": "https://kasirpuko.vercel.app",
+    "cleartext": true,
+    "androidScheme": "https",
+    "errorPath": "index.html"
   },
   "android": {
     "allowMixedContent": true
