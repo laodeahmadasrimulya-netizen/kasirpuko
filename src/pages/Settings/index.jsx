@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Save,
-  RotateCcw,
   CheckCircle2,
   Store,
   Printer,
-  ShieldAlert,
+  ShieldCheck,
   Sparkles,
   Volume2,
   VolumeX,
@@ -26,8 +25,6 @@ import {
 } from 'lucide-react';
 import { ProductsPage } from '../Products';
 import { useSettings } from '../../context/SettingsContext';
-import { useProducts } from '../../context/ProductContext';
-import { useTransactions } from '../../context/TransactionContext';
 import { useAuth } from '../../context/AuthContext';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -41,15 +38,12 @@ import {
 } from '../../utils/sound';
 
 export const SettingsPage = () => {
-  const { settings, updateSettings, resetSettings } = useSettings();
-  const { resetProducts } = useProducts();
-  const { clearHistory } = useTransactions();
+  const { settings, updateSettings } = useSettings();
   const {
     users,
     addUser,
     updateUser,
     deleteUser,
-    resetUsers,
     isAdmin,
     user: currentUser,
     logout,
@@ -136,20 +130,6 @@ export const SettingsPage = () => {
     await updateSettings(form);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
-  };
-
-  const handleResetAllData = async () => {
-    if (
-      window.confirm(
-        'Apakah Anda yakin ingin mengembalikan seluruh aplikasi (menu, transaksi, setting, dan akun kasir) ke data bawaan demo PUKO?'
-      )
-    ) {
-      await resetSettings();
-      await resetProducts();
-      await clearHistory();
-      resetUsers();
-      alert('Semua data berhasil direset ke kondisi default!');
-    }
   };
 
   // --- Cashier Management Handlers ---
@@ -682,31 +662,6 @@ export const SettingsPage = () => {
         </div>
       </form>
 
-      {/* Danger Zone: Reset All Demo Data */}
-      <Card className="border-rose-200 bg-rose-50/30 space-y-3">
-        <div className="flex items-center gap-2">
-          <ShieldAlert className="w-5 h-5 text-rose-600" />
-          <h3 className="font-bold text-rose-900 text-sm">
-            Area Reset Data Demo (Local Storage)
-          </h3>
-        </div>
-        <p className="text-xs text-slate-600">
-          Gunakan tombol di bawah ini jika Anda ingin mengembalikan menu, transaksi, setting, dan akun kasir kembali ke data awal bawaan demo PUKO.
-        </p>
-
-        <div className="pt-2">
-          <Button
-            variant="danger"
-            size="sm"
-            type="button"
-            onClick={handleResetAllData}
-            icon={RotateCcw}
-          >
-            Reset Semua Data ke Default Demo
-          </Button>
-        </div>
-      </Card>
-
       {/* Tombol Keluar dari Akun (Logout) */}
       <div className="pt-2">
         <Button
@@ -782,20 +737,25 @@ export const SettingsPage = () => {
 
           <div>
             <Input
-              label={editingUser?.role === 'ADMIN' ? 'Nama Owner' : 'Nama Kasir'}
+              label={editingUser?.role === 'ADMIN' ? 'Nama Akun Owner (Tampilan di Struk & Dashboard)' : 'Nama Kasir'}
               placeholder={editingUser?.role === 'ADMIN' ? 'Owner' : 'Contoh: Siti Rahma'}
               value={userFormData.name}
               onChange={(e) =>
                 setUserFormData((prev) => ({ ...prev, name: e.target.value }))
               }
               icon={User}
+              helperText={
+                editingUser?.role === 'ADMIN'
+                  ? 'Nama ini tampil di struk/nota dan dashboard. Anda juga bisa mengetikkan nama ini saat login.'
+                  : undefined
+              }
               required
             />
           </div>
 
           <div>
             <Input
-              label={editingUser?.role === 'ADMIN' ? 'Username Alternatif' : 'Username Kasir'}
+              label={editingUser?.role === 'ADMIN' ? 'Username Login' : 'Username Kasir'}
               placeholder={editingUser?.role === 'ADMIN' ? 'admin' : 'Contoh: kasir01'}
               value={userFormData.username}
               onChange={(e) =>
@@ -807,7 +767,7 @@ export const SettingsPage = () => {
               icon={Users}
               helperText={
                 editingUser?.role === 'ADMIN'
-                  ? 'Owner dapat login menggunakan Email atau Username ini'
+                  ? 'ID login alternatif. Anda bisa login menggunakan Username ini ("admin") atau Nama akun ("Owner") dengan sandi yang sama.'
                   : 'Digunakan oleh kasir untuk masuk di layar login'
               }
               required

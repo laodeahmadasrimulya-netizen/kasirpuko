@@ -14,7 +14,8 @@ import { formatDate } from '../../utils/date';
 import { useSettings } from '../../context/SettingsContext';
 import { useAuth } from '../../context/AuthContext';
 import { playPrintReceiptSound } from '../../utils/sound';
-import html2pdf from 'html2pdf.js';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
   const { settings } = useSettings();
@@ -31,58 +32,92 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
     window.print();
   };
 
-  // Save as PDF action using html2pdf with exact thermal paper sizing & flat styling
+  // Save as PDF action using direct html2canvas + jsPDF with offscreen full clone
+  // This guarantees 100% full content capture without clipping from modal scroll containers or viewport bounds
   const handleSavePdf = async () => {
-    const element = receiptRef.current;
-    if (!element) return;
+    const originalEl = receiptRef.current;
+    if (!originalEl) return;
     playPrintReceiptSound();
     setIsExportingPdf(true);
 
-    const prevScrollY = window.scrollY;
-    const prevScrollX = window.scrollX;
-
+    let clone = null;
     try {
-      window.scrollTo(0, 0);
       const targetWidthMm = paperSize === '58mm' ? 58 : 80;
-      const renderedWidth = element.offsetWidth || (paperSize === '58mm' ? 260 : 340);
-      const renderedHeight = element.offsetHeight || 500;
+      const pixelWidth = paperSize === '58mm' ? 280 : 360;
 
-      // Calculate exact proportional height in mm + 4mm margin
-      const targetHeightMm = Math.ceil((renderedHeight / renderedWidth) * targetWidthMm) + 4;
+      // 1. Create clean off-screen clone attached directly to document.body
+      // This completely detaches it from Modal scroll/max-height constraints!
+      clone = originalEl.cloneNode(true);
+      clone.id = 'receipt-pdf-render-clone';
 
-      const opt = {
-        margin: [2, 1, 2, 1],
-        filename: `Struk-${transaction.id}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
-          scale: 3,
-          useCORS: true,
-          logging: false,
-          backgroundColor: '#ffffff',
-          scrollX: 0,
-          scrollY: 0,
-          onclone: (clonedDoc) => {
-            const el = clonedDoc.getElementById('receipt-print-area');
-            if (el) {
-              el.style.boxShadow = 'none';
-              el.style.borderRadius = '0';
-              el.style.border = 'none';
-            }
-          },
-        },
-        jsPDF: {
-          unit: 'mm',
-          format: [targetWidthMm, targetHeightMm],
-          orientation: 'portrait',
-        },
-      };
+      // Apply clean styles for exact thermal dimensioning without clipping
+      clone.style.position = 'fixed';
+      clone.style.left = '-9999px';
+      clone.style.top = '0';
+      clone.style.width = `${pixelWidth}px`;
+      clone.style.height = 'auto';
+      clone.style.maxHeight = 'none';
+      clone.style.overflow = 'visible';
+      clone.style.boxShadow = 'none';
+      clone.style.border = 'none';
+      clone.style.borderRadius = '0';
+      clone.style.margin = '0';
+      clone.style.backgroundColor = '#ffffff';
+      clone.style.zIndex = '-9999';
 
-      await html2pdf().set(opt).from(element).save();
+      document.body.appendChild(clone);
+
+      // 2. Ensure all images inside clone (e.g. /logo.png) are fully loaded
+      const images = clone.querySelectorAll('img');
+      await Promise.all(
+        Array.from(images).map(
+          (img) =>
+            new Promise((resolve) => {
+              if (img.complete) return resolve();
+              img.onload = () => resolve();
+              img.onerror = () => resolve();
+            })
+        )
+      );
+
+      // Brief pause to ensure fonts and layout geometry are rendered
+      await new Promise((resolve) => setTimeout(resolve, 80));
+
+      const fullHeight = clone.scrollHeight || clone.offsetHeight;
+
+      // 3. Render the full clone with html2canvas
+      const canvas = await html2canvas(clone, {
+        scale: 3, // High DPI for crystal-sharp text & logo
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        width: pixelWidth,
+        height: fullHeight,
+        windowWidth: 1200,
+        windowHeight: fullHeight + 500,
+        scrollX: 0,
+        scrollY: 0,
+      });
+
+      // 4. Calculate exact proportional height in mm (single continuous thermal roll)
+      const targetHeightMm = Math.round((canvas.height / canvas.width) * targetWidthMm);
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [targetWidthMm, targetHeightMm],
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      pdf.addImage(imgData, 'JPEG', 0, 0, targetWidthMm, targetHeightMm, undefined, 'FAST');
+      pdf.save(`Struk-${transaction.id}.pdf`);
     } catch (err) {
-      console.error('Failed to generate PDF:', err);
+      console.error('Failed to generate receipt PDF:', err);
       window.print();
     } finally {
-      window.scrollTo(prevScrollX, prevScrollY);
+      if (clone && clone.parentNode) {
+        clone.parentNode.removeChild(clone);
+      }
       setIsExportingPdf(false);
     }
   };

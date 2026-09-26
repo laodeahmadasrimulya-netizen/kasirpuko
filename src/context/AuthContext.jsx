@@ -404,6 +404,50 @@ export const AuthProvider = ({ children }) => {
     }
 
     // 2. Check local/database users list (Supports Name, Username, Phone, and Email for both Admin and Kasir)
+    // Selalu ambil data terbaru dari Supabase agar perubahan sandi/nama di satu perangkat (misal laptop) langsung sinkron di perangkat lain (misal HP)
+    let currentUsers = users;
+    try {
+      const { data: dbUsers, error: dbError } = await supabase.from('users').select('*');
+      if (!dbError && Array.isArray(dbUsers) && dbUsers.length > 0) {
+        const mapped = dbUsers.map((u) => {
+          let email = u.email || (u.id === 'usr-admin' ? OWNER_EMAIL : '');
+          let avatar = u.avatar || '🥑';
+          if (u.avatar && u.avatar.includes('|email:')) {
+            const parts = u.avatar.split('|email:');
+            avatar = parts[0] || '🥑';
+            email = parts[1] || email;
+          }
+          const sId = u.store_id || DEFAULT_STORE_ID;
+          return {
+            id: u.id,
+            store_id: sId,
+            storeId: sId,
+            username: u.username,
+            email: email,
+            pin: String(u.pin || ''),
+            name: u.name,
+            role: u.role || 'KASIR',
+            phone: u.phone || '',
+            avatar: avatar,
+            roleLabel: u.role === 'ADMIN' ? 'Admin / Owner' : 'Kasir Outlet',
+            roleBadgeColor:
+              u.role === 'ADMIN'
+                ? 'bg-amber-400/20 text-amber-300 border-amber-400/30'
+                : 'bg-emerald-400/20 text-emerald-300 border-emerald-400/30',
+          };
+        });
+        currentUsers = mapped;
+        setUsers(mapped);
+        try {
+          localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(mapped));
+        } catch {
+          // ignore
+        }
+      }
+    } catch (err) {
+      console.warn('Gagal sinkronisasi data user dari Supabase saat login:', err);
+    }
+
     let storePhone = '';
     try {
       const savedSettings = localStorage.getItem('puko_settings');
@@ -433,7 +477,7 @@ export const AuthProvider = ({ children }) => {
       return idMatched;
     };
 
-    const found = users.find(isMatch);
+    const found = currentUsers.find(isMatch);
 
     if (found) {
       const userStoreId = found.storeId || found.store_id || (found.id === 'usr-admin' || (found.role === 'ADMIN' && found.email === OWNER_EMAIL) ? DEFAULT_STORE_ID : DEFAULT_STORE_ID);
@@ -540,6 +584,15 @@ export const AuthProvider = ({ children }) => {
     if (error) {
       if (error.message.includes('already registered')) {
         throw new Error('Email ini sudah terdaftar. Silakan langsung masuk menggunakan email & kata sandi Anda.');
+      }
+      if (
+        error.message.toLowerCase().includes('confirmation email') ||
+        error.message.toLowerCase().includes('sending confirmation') ||
+        error.message.toLowerCase().includes('rate limit')
+      ) {
+        throw new Error(
+          'Server Supabase gagal mengirim email OTP (terkena batas/limit 3 email/jam dari Supabase). Solusi: Silakan buka tab Supabase Anda > Authentication > Providers > Email, lalu matikan toggle "Confirm email" agar pendaftaran akun bisa langsung aktif tanpa perlu kode OTP.'
+        );
       }
       throw error;
     }
@@ -801,6 +854,15 @@ export const AuthProvider = ({ children }) => {
       email: cleanEmail,
     });
     if (error) {
+      if (
+        error.message.toLowerCase().includes('confirmation email') ||
+        error.message.toLowerCase().includes('sending confirmation') ||
+        error.message.toLowerCase().includes('rate limit')
+      ) {
+        throw new Error(
+          'Server Supabase gagal mengirim ulang email (terkena limit 3 email/jam). Solusi: Matikan toggle "Confirm email" di Dashboard Supabase > Authentication > Providers > Email agar akun bisa langsung aktif tanpa OTP.'
+        );
+      }
       throw new Error(error.message || 'Gagal mengirim ulang kode. Silakan coba lagi sebentar lagi.');
     }
     return true;

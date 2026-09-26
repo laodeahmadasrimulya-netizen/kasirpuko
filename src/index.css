@@ -67,19 +67,46 @@
   -webkit-tap-highlight-color: transparent !important;
 }
 
-/* Print Styles for 58mm and 80mm Thermal Receipts */
+/* Print Styles for Receipts and Reports */
 @media print {
   @page {
-    margin: 0;
+    margin: 4mm;
     size: auto;
   }
 
+  html,
   body {
     background: #ffffff !important;
+    color: #000000 !important;
     margin: 0 !important;
     padding: 0 !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
   }
 
+  /* CRITICAL: Force all modal wrappers, fixed backdrops, and scroll containers to expand fully without clipping */
+  body,
+  #root,
+  .fixed,
+  [class*="fixed"],
+  [class*="overflow-"],
+  [class*="max-h-"] {
+    position: static !important;
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    transform: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Hide everything on the page except the designated print containers */
   body * {
     visibility: hidden;
   }
@@ -91,28 +118,33 @@
     visibility: visible !important;
   }
 
+  /* Thermal Receipt Print Styles */
   #receipt-print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
+    position: absolute !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: 0 !important;
     margin: 0 auto !important;
     background: #ffffff !important;
     color: #000000 !important;
     box-shadow: none !important;
     border: none !important;
+    border-radius: 0 !important;
+    page-break-after: avoid;
+    break-after: avoid;
   }
 
   #receipt-print-area.thermal-58mm {
     width: 58mm !important;
     max-width: 58mm !important;
     padding: 2mm 3mm !important;
-    font-size: 10.5px !important;
+    font-size: 11px !important;
   }
 
   #receipt-print-area.thermal-80mm {
     width: 80mm !important;
     max-width: 80mm !important;
-    padding: 4mm 5mm !important;
+    padding: 3mm 4mm !important;
     font-size: 12px !important;
   }
 
@@ -139,18 +171,23 @@
     object-fit: contain !important;
   }
 
+  /* Full Transaction Report Print Styles */
   #printable-report {
-    position: absolute;
-    left: 0;
-    top: 0;
+    position: static !important;
     width: 100% !important;
     max-width: 100% !important;
-    margin: 0 !important;
-    padding: 6mm 8mm !important;
+    margin: 0 auto !important;
+    padding: 4mm !important;
     background: #ffffff !important;
     color: #000000 !important;
     box-shadow: none !important;
     border: none !important;
     border-radius: 0 !important;
+  }
+
+  #printable-report tr,
+  #printable-report table {
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
 }

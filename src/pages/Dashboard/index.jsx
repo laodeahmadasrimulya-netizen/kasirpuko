@@ -81,7 +81,7 @@ import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { formatIDR, formatNumber } from '../../utils/currency';
-import { formatDate, isToday } from '../../utils/date';
+import { formatDate, isToday, getDateStringInStoreTZ } from '../../utils/date';
 import { handleImageError } from '../../utils/imageFallback';
 import { BannerCarousel } from '../../components/dashboard/BannerCarousel';
 import { IngredientStockWidget } from '../../components/dashboard/IngredientStockWidget';
@@ -382,18 +382,12 @@ export const DashboardPage = () => {
   const [filterMode, setFilterMode] = useState('harian');
 
   const todayDateStr = useMemo(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return getDateStringInStoreTZ(new Date());
   }, []);
 
   const currentMonthStr = useMemo(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    return `${year}-${month}`;
+    const today = getDateStringInStoreTZ(new Date());
+    return today ? today.substring(0, 7) : '';
   }, []);
 
   const [selectedDate, setSelectedDate] = useState(todayDateStr);
@@ -401,19 +395,12 @@ export const DashboardPage = () => {
 
   const isSameDate = (isoString, targetDateStr) => {
     if (!isoString || !targetDateStr) return false;
-    const d = new Date(isoString);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}` === targetDateStr;
+    return getDateStringInStoreTZ(isoString) === targetDateStr;
   };
 
   const isSameMonth = (isoString, targetMonthStr) => {
     if (!isoString || !targetMonthStr) return false;
-    const d = new Date(isoString);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    return `${year}-${month}` === targetMonthStr;
+    return getDateStringInStoreTZ(isoString).startsWith(targetMonthStr);
   };
 
   const harianScrollRef = useRef(null);
@@ -421,24 +408,23 @@ export const DashboardPage = () => {
   // Generate 30 hari ke belakang berakhir di hari ini (urutan: hari terlama -> hari ini di paling kanan)
   const past30Days = useMemo(() => {
     const days = [];
-    const now = new Date();
+    const [tYear, tMonth, tDay] = (todayDateStr || '2026-01-01').split('-').map(Number);
     for (let i = 29; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(now.getDate() - i);
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
+      const d = new Date(Date.UTC(tYear, tMonth - 1, tDay - i));
+      const year = d.getUTCFullYear();
+      const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(d.getUTCDate()).padStart(2, '0');
       const dateStr = `${year}-${month}-${day}`;
 
       days.push({
         dateStr,
-        dayName: INDO_DAYS_SHORT[d.getDay()],
-        dayNumber: d.getDate(),
+        dayName: INDO_DAYS_SHORT[d.getUTCDay()],
+        dayNumber: d.getUTCDate(),
         isToday: i === 0,
       });
     }
     return days;
-  }, []);
+  }, [todayDateStr]);
 
   // Saat mode Harian aktif, otomatis geser scroll ke paling kanan (Hari Ini)
   useEffect(() => {
@@ -569,13 +555,9 @@ export const DashboardPage = () => {
 
   // 5. DATA GRAFIK BATANG HARIAN (Multi-hari, dapat digeser horizontal seperti kereta ke hari sebelumnya)
   const dailySalesBarData = useMemo(() => {
-    const todayDate = new Date();
-    todayDate.setHours(23, 59, 59, 999);
-
-    const todayYear = todayDate.getFullYear();
-    const todayMonth = String(todayDate.getMonth() + 1).padStart(2, '0');
-    const todayDayNum = String(todayDate.getDate()).padStart(2, '0');
-    const todayDateStr = `${todayYear}-${todayMonth}-${todayDayNum}`;
+    const nowInStoreStr = getDateStringInStoreTZ(new Date());
+    const [todayYear, todayMonth, todayDayNum] = nowInStoreStr.split('-').map(Number);
+    const todayDate = new Date(Date.UTC(todayYear, todayMonth - 1, todayDayNum));
 
     // Cari tanggal terawal dari seluruh transaksi & pengeluaran untuk menentukan rentang
     const allTimestamps = [
@@ -584,17 +566,16 @@ export const DashboardPage = () => {
     ];
 
     // Minimal sediakan 30 hari ke belakang agar grafik selalu leluasa digeser seperti kereta
-    let earliestDate = new Date();
-    earliestDate.setDate(todayDate.getDate() - 29);
-    earliestDate.setHours(0, 0, 0, 0);
+    let earliestDate = new Date(Date.UTC(todayYear, todayMonth - 1, todayDayNum - 29));
 
     if (allTimestamps.length > 0) {
       const minTimestamp = Math.min(
         ...allTimestamps.map((ts) => new Date(ts).getTime()).filter((t) => !isNaN(t))
       );
       if (!isNaN(minTimestamp)) {
-        const minDate = new Date(minTimestamp);
-        minDate.setHours(0, 0, 0, 0);
+        const minDateStr = getDateStringInStoreTZ(minTimestamp);
+        const [my, mm, md] = minDateStr.split('-').map(Number);
+        const minDate = new Date(Date.UTC(my, mm - 1, md));
         if (minDate < earliestDate) {
           earliestDate = minDate;
         }
@@ -623,27 +604,24 @@ export const DashboardPage = () => {
     const totalDays = Math.min(90, diffDays);
 
     for (let i = totalDays - 1; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(todayDate.getDate() - i);
-      d.setHours(0, 0, 0, 0);
-
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const dayNum = String(d.getDate()).padStart(2, '0');
+      const d = new Date(Date.UTC(todayYear, todayMonth - 1, todayDayNum - i));
+      const year = d.getUTCFullYear();
+      const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dayNum = String(d.getUTCDate()).padStart(2, '0');
       const dateStr = `${year}-${month}-${dayNum}`;
 
-      const dayIdx = d.getDay();
+      const dayIdx = d.getUTCDay();
       const dayName = DAY_NAMES[dayIdx];
       const fullDayName = FULL_DAY_NAMES[dayIdx];
-      const monthShort = INDO_MONTHS_SHORT[d.getMonth()] || d.toLocaleDateString('id-ID', { month: 'short' });
+      const monthShort = INDO_MONTHS_SHORT[d.getUTCMonth()] || `${month}`;
       const isToday = dateStr === todayDateStr;
 
       days.push({
         dateKey: dateStr,
-        day: isToday ? 'Hari Ini' : `${dayName} ${d.getDate()}`,
-        shortLabel: `${d.getDate()} ${monthShort}`,
+        day: isToday ? 'Hari Ini' : `${dayName} ${d.getUTCDate()}`,
+        shortLabel: `${d.getUTCDate()} ${monthShort}`,
         dayName,
-        fullDayName: `${fullDayName}, ${d.getDate()} ${monthShort} ${year}`,
+        fullDayName: `${fullDayName}, ${d.getUTCDate()} ${monthShort} ${year}`,
         isToday,
         omzet: 0,
         pemasukan: 0,
@@ -657,11 +635,7 @@ export const DashboardPage = () => {
     // Akumulasi data transaksi tersimpan ke masing-masing hari (Pemasukan & Cup tanpa topping)
     transactions.forEach((tx) => {
       if (!tx.timestamp) return;
-      const txDate = new Date(tx.timestamp);
-      const year = txDate.getFullYear();
-      const month = String(txDate.getMonth() + 1).padStart(2, '0');
-      const dayNum = String(txDate.getDate()).padStart(2, '0');
-      const txDateStr = `${year}-${month}-${dayNum}`;
+      const txDateStr = getDateStringInStoreTZ(tx.timestamp);
 
       const targetDay = days.find((d) => d.dateKey === txDateStr);
       if (targetDay) {
@@ -676,11 +650,7 @@ export const DashboardPage = () => {
     if (Array.isArray(expenses)) {
       expenses.forEach((exp) => {
         if (!exp.timestamp) return;
-        const expDate = new Date(exp.timestamp);
-        const year = expDate.getFullYear();
-        const month = String(expDate.getMonth() + 1).padStart(2, '0');
-        const dayNum = String(expDate.getDate()).padStart(2, '0');
-        const expDateStr = `${year}-${month}-${dayNum}`;
+        const expDateStr = getDateStringInStoreTZ(exp.timestamp);
 
         const targetDay = days.find((d) => d.dateKey === expDateStr);
         if (targetDay) {

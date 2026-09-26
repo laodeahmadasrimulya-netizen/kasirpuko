@@ -81,6 +81,41 @@ export const ExpenseProvider = ({ children }) => {
     }
   };
 
+  // Delete multiple expenses
+  const deleteExpenses = async (ids) => {
+    try {
+      await expenseService.deleteExpenses(ids);
+      setExpenses((prev) => prev.filter((item) => !ids.includes(item.id)));
+      const sum = await expenseService.getSummary();
+      setSummary(sum);
+      return true;
+    } catch (err) {
+      console.error('Failed to delete expenses:', err);
+      throw err;
+    }
+  };
+
+  // Clear all expenses
+  const clearExpenses = async () => {
+    try {
+      await expenseService.clearHistory();
+      setExpenses([]);
+      setSummary({
+        todayTotal: 0,
+        todayCount: 0,
+        monthTotal: 0,
+        monthCount: 0,
+        allTimeTotal: 0,
+        totalCount: 0,
+        categoryBreakdown: {},
+      });
+      return true;
+    } catch (err) {
+      console.error('Failed to clear expenses:', err);
+      throw err;
+    }
+  };
+
   const value = {
     expenses,
     summary,
@@ -88,6 +123,9 @@ export const ExpenseProvider = ({ children }) => {
     addExpense,
     updateExpense,
     deleteExpense,
+    deleteExpenses,
+    clearExpenses,
+    clearHistory: clearExpenses,
     refreshExpenses: loadData,
   };
 

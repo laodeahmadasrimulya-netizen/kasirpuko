@@ -22,8 +22,10 @@ import {
   Sliders,
   Smartphone,
   ChevronDown,
+  FileSpreadsheet,
 } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
+import { exportTransactionsToExcel } from '../../utils/excelExport';
 import { useTransactions } from '../../context/TransactionContext';
 import { useSettings } from '../../context/SettingsContext';
 import { useExpenses } from '../../context/ExpenseContext';
@@ -43,6 +45,8 @@ import {
   isToday,
   isYesterday,
   formatDateInput,
+  getDateStringInStoreTZ,
+  getPastDaysRangeInStoreTZ,
 } from '../../utils/date';
 import { playPrintReceiptSound } from '../../utils/sound';
 import { useAuth } from '../../hooks/useAuth';
@@ -52,7 +56,7 @@ export const TransactionsPage = () => {
   const { transactions, setActiveReceipt, clearHistory, deleteTransactions } = useTransactions();
   const { settings } = useSettings();
   const { user, isAdmin } = useAuth();
-  const { expenses } = useExpenses();
+  const { expenses, deleteExpenses, clearExpenses } = useExpenses();
   const { ingredients, formatStock } = useIngredients();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,14 +90,14 @@ export const TransactionsPage = () => {
   }, [customStartDate]);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [reportFormat, setReportFormat] = useState('mobile'); // 'mobile' (Pas Layar HP) | 'a4' (Standar A4)
+  const [reportFormat, setReportFormat] = useState('a4'); // Standar A4 universal
 
   const reportRef = useRef(null);
 
   // Filter transactions based on date, payment method, and search keyword
   const filteredTransactions = useMemo(() => {
     return transactions.filter((tx) => {
-      const txDate = new Date(tx.timestamp);
+      const txDateStr = getDateStringInStoreTZ(tx.timestamp);
 
       // 1. Date Filter
       let matchesDate = true;
@@ -102,59 +106,18 @@ export const TransactionsPage = () => {
       } else if (dateFilter === 'YESTERDAY') {
         matchesDate = isYesterday(tx.timestamp);
       } else if (dateFilter === 'LAST_7_DAYS') {
-        const now = new Date();
-        const start = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() - 6,
-          0,
-          0,
-          0,
-          0
-        );
-        const end = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate(),
-          23,
-          59,
-          59,
-          999
-        );
-        matchesDate = txDate >= start && txDate <= end;
+        const { startDateStr, endDateStr } = getPastDaysRangeInStoreTZ(7);
+        matchesDate = txDateStr >= startDateStr && txDateStr <= endDateStr;
       } else if (dateFilter === 'LAST_30_DAYS') {
-        const now = new Date();
-        const start = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() - 29,
-          0,
-          0,
-          0,
-          0
-        );
-        const end = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate(),
-          23,
-          59,
-          59,
-          999
-        );
-        matchesDate = txDate >= start && txDate <= end;
+        const { startDateStr, endDateStr } = getPastDaysRangeInStoreTZ(30);
+        matchesDate = txDateStr >= startDateStr && txDateStr <= endDateStr;
       } else if (dateFilter === 'MONTH' || dateFilter === 'CUSTOM') {
         if (customStartDate && customEndDate) {
-          const s = new Date(customStartDate + 'T00:00:00');
-          const e = new Date(customEndDate + 'T23:59:59.999');
-          matchesDate = txDate >= s && txDate <= e;
+          matchesDate = txDateStr >= customStartDate && txDateStr <= customEndDate;
         } else if (customStartDate) {
-          const s = new Date(customStartDate + 'T00:00:00');
-          const e = new Date(customStartDate + 'T23:59:59.999');
-          matchesDate = txDate >= s && txDate <= e;
+          matchesDate = txDateStr >= customStartDate;
         } else if (customEndDate) {
-          const e = new Date(customEndDate + 'T23:59:59.999');
-          matchesDate = txDate <= e;
+          matchesDate = txDateStr <= customEndDate;
         }
       }
 
@@ -218,65 +181,25 @@ export const TransactionsPage = () => {
   const filteredExpenses = useMemo(() => {
     return (expenses || []).filter((exp) => {
       if (!exp.timestamp) return false;
-      const expDate = new Date(exp.timestamp);
+      const expDateStr = getDateStringInStoreTZ(exp.timestamp);
 
       if (dateFilter === 'TODAY') {
         return isToday(exp.timestamp);
       } else if (dateFilter === 'YESTERDAY') {
         return isYesterday(exp.timestamp);
       } else if (dateFilter === 'LAST_7_DAYS') {
-        const now = new Date();
-        const start = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() - 6,
-          0,
-          0,
-          0,
-          0
-        );
-        const end = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate(),
-          23,
-          59,
-          59,
-          999
-        );
-        return expDate >= start && expDate <= end;
+        const { startDateStr, endDateStr } = getPastDaysRangeInStoreTZ(7);
+        return expDateStr >= startDateStr && expDateStr <= endDateStr;
       } else if (dateFilter === 'LAST_30_DAYS') {
-        const now = new Date();
-        const start = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate() - 29,
-          0,
-          0,
-          0,
-          0
-        );
-        const end = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate(),
-          23,
-          59,
-          59,
-          999
-        );
-        return expDate >= start && expDate <= end;
+        const { startDateStr, endDateStr } = getPastDaysRangeInStoreTZ(30);
+        return expDateStr >= startDateStr && expDateStr <= endDateStr;
       } else if (dateFilter === 'MONTH' || dateFilter === 'CUSTOM') {
         if (customStartDate && customEndDate) {
-          const s = new Date(customStartDate + 'T00:00:00');
-          const e = new Date(customEndDate + 'T23:59:59.999');
-          return expDate >= s && expDate <= e;
+          return expDateStr >= customStartDate && expDateStr <= customEndDate;
         } else if (customStartDate) {
-          const s = new Date(customStartDate + 'T00:00:00');
-          return expDate >= s;
+          return expDateStr >= customStartDate;
         } else if (customEndDate) {
-          const e = new Date(customEndDate + 'T23:59:59.999');
-          return expDate <= e;
+          return expDateStr <= customEndDate;
         }
       }
       return true;
@@ -501,7 +424,7 @@ export const TransactionsPage = () => {
     return name.toLowerCase().includes('kasir') ? name : `Kasir (${name})`;
   }, [isAdmin, user, settings]);
 
-  // Download PDF using html2pdf.js with mobile (pas layar HP) or A4 layout
+  // Download PDF using html2pdf.js with full A4 multi-page document layout
   const handleSavePdf = async () => {
     const element = reportRef.current;
     if (!element) return;
@@ -511,93 +434,58 @@ export const TransactionsPage = () => {
     const prevScrollX = window.scrollX;
 
     try {
-      // Reset scroll position temporarily to prevent html2canvas blank page/offset issue
       window.scrollTo(0, 0);
-      if (element.parentElement) {
-        element.parentElement.scrollLeft = 0;
-      }
       const scrollableParent = element.closest('.overflow-y-auto');
       const prevParentScrollTop = scrollableParent ? scrollableParent.scrollTop : 0;
       if (scrollableParent) {
         scrollableParent.scrollTop = 0;
       }
 
-      const isMobileFormat = reportFormat === 'mobile';
       const safeLabel = periodLabel.replace(/[^a-zA-Z0-9]/g, '_');
-      const filename = `Laporan_Transaksi_PUKO_${isMobileFormat ? 'Mobile_' : ''}${safeLabel}.pdf`;
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+      const filename = `Laporan_Transaksi_PUKO_${safeLabel}_${dateStr}.pdf`;
 
-      // Measure the real rendered dimensions
-      const renderedWidth = element.offsetWidth || (isMobileFormat ? 420 : 750);
-      const renderedHeight = element.offsetHeight || 600;
-
-      let opt;
-      if (isMobileFormat) {
-        // Continuous single-page height calibrated to 108mm width (+ 4mm bottom buffer)
-        const targetWidthMm = 108;
-        const targetHeightMm = Math.ceil((renderedHeight / renderedWidth) * targetWidthMm) + 4;
-
-        opt = {
-          margin: [3, 2, 3, 2],
-          filename: filename,
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: {
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            backgroundColor: '#ffffff',
-            scrollX: 0,
-            scrollY: 0,
-            onclone: (clonedDoc) => {
-              const el = clonedDoc.getElementById('printable-report');
-              if (el) {
-                el.style.boxShadow = 'none';
-                el.style.borderRadius = '0';
-                if (el.parentElement) {
-                  el.parentElement.style.overflow = 'visible';
-                }
+      const opt = {
+        margin: [10, 8, 10, 8],
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          scrollX: 0,
+          scrollY: 0,
+          onclone: (clonedDoc) => {
+            const el = clonedDoc.getElementById('printable-report');
+            if (el) {
+              el.style.boxShadow = 'none';
+              el.style.borderRadius = '0';
+              el.style.maxWidth = '100%';
+              el.style.width = '100%';
+              let parent = el.parentElement;
+              while (parent && parent !== clonedDoc.body) {
+                parent.style.overflow = 'visible';
+                parent.style.maxHeight = 'none';
+                parent.style.height = 'auto';
+                parent.style.position = 'static';
+                parent.style.transform = 'none';
+                parent = parent.parentElement;
               }
-            },
+            }
           },
-          jsPDF: {
-            unit: 'mm',
-            format: [targetWidthMm, targetHeightMm],
-            orientation: 'portrait',
-          },
-        };
-      } else {
-        opt = {
-          margin: [8, 6, 8, 6],
-          filename: filename,
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: {
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            backgroundColor: '#ffffff',
-            scrollX: 0,
-            scrollY: 0,
-            onclone: (clonedDoc) => {
-              const el = clonedDoc.getElementById('printable-report');
-              if (el) {
-                el.style.boxShadow = 'none';
-                el.style.borderRadius = '0';
-                if (el.parentElement) {
-                  el.parentElement.style.overflow = 'visible';
-                }
-              }
-            },
-          },
-          jsPDF: {
-            unit: 'mm',
-            format: 'a4',
-            orientation: 'portrait',
-          },
-          pagebreak: {
-            mode: ['avoid-all', 'css', 'legacy'],
-            avoid: ['tr'],
-          },
-        };
-      }
+        },
+        jsPDF: {
+          unit: 'mm',
+          format: 'a4',
+          orientation: 'portrait',
+        },
+        pagebreak: {
+          mode: ['avoid-all', 'css', 'legacy'],
+          avoid: ['tr', 'table'],
+        },
+      };
 
       await html2pdf().set(opt).from(element).save();
 
@@ -620,25 +508,69 @@ export const TransactionsPage = () => {
     window.print();
   };
 
-  const handleClearHistory = async () => {
+  // Ekspor langsung ke file Excel (.xlsx) dengan rincian lengkap multi-sheet
+  const handleExportExcel = () => {
     if (filteredTransactions.length === 0) {
-      alert('Tidak ada transaksi pada filter periode ini untuk dibersihkan.');
+      alert('Tidak ada transaksi untuk diekspor pada filter ini.');
+      return;
+    }
+    exportTransactionsToExcel({
+      transactions: filteredTransactions,
+      periodLabel,
+      summary,
+      menuBreakdown,
+      ingredientUsageList,
+      expenses: filteredExpenses,
+      totalPengeluaran,
+      totalPendapatanBersih,
+      storeSettings: settings,
+      printedBy,
+    });
+  };
+
+  // Handler ekspor PDF dari tombol utama
+  const handleOpenPdfExport = () => {
+    if (filteredTransactions.length === 0) {
+      alert('Tidak ada transaksi untuk diekspor pada filter ini.');
+      return;
+    }
+    setIsReportModalOpen(true);
+  };
+
+  const handleClearHistory = async () => {
+    if (filteredTransactions.length === 0 && filteredExpenses.length === 0) {
+      alert('Tidak ada riwayat transaksi atau pengeluaran pada filter periode ini untuk dibersihkan.');
       return;
     }
 
     const isAllSelected =
       dateFilter === 'ALL' && filteredTransactions.length === transactions.length;
-    const confirmMsg = isAllSelected
-      ? `Apakah Anda yakin ingin menghapus seluruh (${transactions.length}) riwayat transaksi?`
-      : `Apakah Anda yakin ingin menghapus ${filteredTransactions.length} transaksi pada periode "${periodLabel}"?`;
+
+    const countTx = filteredTransactions.length;
+    const countExp = filteredExpenses.length;
+
+    let confirmMsg = '';
+    if (isAllSelected) {
+      confirmMsg = `Apakah Anda yakin ingin menghapus seluruh riwayat transaksi (${countTx} data) dan seluruh catatan pengeluaran toko (${expenses.length} data)?`;
+    } else {
+      confirmMsg = `Apakah Anda yakin ingin menghapus ${countTx} transaksi dan ${countExp} pengeluaran toko pada periode "${periodLabel}"?`;
+    }
 
     if (window.confirm(confirmMsg)) {
       if (isAllSelected) {
         await clearHistory();
+        if (clearExpenses) await clearExpenses();
       } else {
-        const idsToDelete = filteredTransactions.map((t) => t.id);
-        await deleteTransactions(idsToDelete);
+        const txIdsToDelete = filteredTransactions.map((t) => t.id);
+        if (txIdsToDelete.length > 0) {
+          await deleteTransactions(txIdsToDelete);
+        }
+        const expIdsToDelete = filteredExpenses.map((e) => e.id);
+        if (expIdsToDelete.length > 0 && deleteExpenses) {
+          await deleteExpenses(expIdsToDelete);
+        }
       }
+      playSuccessSound();
     }
   };
 
@@ -652,24 +584,28 @@ export const TransactionsPage = () => {
           </h2>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="primary"
             size="sm"
-            onClick={() => {
-              if (filteredTransactions.length === 0) {
-                alert('Tidak ada transaksi untuk diekspor pada filter ini.');
-                return;
-              }
-              setIsReportModalOpen(true);
-            }}
+            onClick={handleOpenPdfExport}
             icon={FileText}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm"
           >
-            Ekspor PDF, Excel, atau Kirim lewat WA
+            Ekspor PDF
           </Button>
 
-          {isAdmin && transactions.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportExcel}
+            icon={FileSpreadsheet}
+            className="font-bold border-slate-300 text-slate-700 hover:bg-slate-50 shadow-xs"
+          >
+            Ekspor Excel
+          </Button>
+
+          {isAdmin && (transactions.length > 0 || expenses.length > 0) && (
             <Button
               variant="danger"
               size="sm"
@@ -976,38 +912,15 @@ export const TransactionsPage = () => {
         maxWidth="max-w-4xl"
       >
         <div className="space-y-4">
-          {/* Format Switcher & Action Header Bar */}
+          {/* Action Header Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 bg-slate-100 rounded-2xl">
-            {/* Paper Size / View Format Switcher */}
-            <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
-              <span className="text-[11px] font-bold text-slate-500 pl-1.5 uppercase tracking-wider flex items-center gap-1">
-                <Sliders className="w-3.5 h-3.5 text-puko-600" /> Format:
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <FileText className="w-4 h-4 text-puko-600" /> Dokumen Laporan Penjualan (A4)
               </span>
-              <button
-                type="button"
-                onClick={() => setReportFormat('mobile')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  reportFormat === 'mobile'
-                    ? 'bg-puko-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Smartphone className="w-3.5 h-3.5" /> Pas Layar HP
-              </button>
-              <button
-                type="button"
-                onClick={() => setReportFormat('a4')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  reportFormat === 'a4'
-                    ? 'bg-puko-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <FileText className="w-3.5 h-3.5" /> Standar A4
-              </button>
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
               <Button
                 variant="primary"
                 size="sm"
@@ -1016,11 +929,17 @@ export const TransactionsPage = () => {
                 icon={isExportingPdf ? Loader2 : Download}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex-1 sm:flex-none shadow-sm"
               >
-                {isExportingPdf
-                  ? 'Sedang Mengunduh...'
-                  : reportFormat === 'mobile'
-                  ? 'Download PDF (Layar HP)'
-                  : 'Download PDF (A4)'}
+                {isExportingPdf ? 'Sedang Mengunduh...' : 'Download PDF (A4)'}
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportExcel}
+                icon={FileSpreadsheet}
+                className="font-bold border-slate-300 text-slate-700 hover:bg-slate-50 flex-1 sm:flex-none shadow-xs"
+              >
+                Ekspor Excel
               </Button>
 
               <Button
@@ -1042,13 +961,13 @@ export const TransactionsPage = () => {
               ref={reportRef}
               style={{
                 width: '100%',
-                maxWidth: reportFormat === 'mobile' ? '430px' : '750px',
+                maxWidth: '750px',
                 backgroundColor: '#ffffff',
                 color: '#0f172a',
-                padding: reportFormat === 'mobile' ? '16px 14px' : '28px 32px',
+                padding: '28px 32px',
                 fontFamily:
                   'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                fontSize: reportFormat === 'mobile' ? '10px' : '11px',
+                fontSize: '11px',
                 borderRadius: '8px',
                 boxShadow: '0 4px 20px -2px rgba(0, 0, 0, 0.1)',
                 boxSizing: 'border-box',

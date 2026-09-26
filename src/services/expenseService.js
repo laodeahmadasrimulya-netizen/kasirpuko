@@ -241,6 +241,36 @@ export const expenseService = {
   },
 
   /**
+   * Hapus banyak catatan pengeluaran berdasarkan array ID
+   */
+  async deleteExpenses(ids) {
+    if (!ids || ids.length === 0) return true;
+    try {
+      await supabase.from('expenses').delete().in('id', ids);
+    } catch (err) {
+      console.warn('[expenseService] deleteExpenses error di Supabase:', err);
+    }
+    const list = await this.getAll();
+    const filtered = list.filter((item) => !ids.includes(item.id));
+    storageService.set(getStorageKey(), filtered);
+    return true;
+  },
+
+  /**
+   * Bersihkan seluruh riwayat pengeluaran toko
+   */
+  async clearHistory() {
+    const storeId = storeService.getActiveStoreId();
+    try {
+      await supabase.from('expenses').delete().eq('store_id', storeId);
+    } catch (err) {
+      console.warn('[expenseService] clearHistory error di Supabase:', err);
+    }
+    storageService.set(getStorageKey(), []);
+    return true;
+  },
+
+  /**
    * Ringkasan metrik pengeluaran
    */
   async getSummary() {

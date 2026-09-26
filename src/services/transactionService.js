@@ -416,28 +416,16 @@ export const transactionService = {
       }
 
       if (!error && Array.isArray(data)) {
-        if (data.length > 0) {
-          const mapped = data.map(mapFromDB);
-          storageService.set(storageKey, mapped);
-          return mapped;
-        }
-        // Jika toko baru belum memiliki transaksi, kembalikan array kosong (jangan pakai INITIAL_TRANSACTIONS milik PUKO default)
-        if (storeId !== DEFAULT_STORE_ID) {
-          const cached = storageService.get(storageKey, []);
-          return cached.map(mapFromDB);
-        }
+        const mapped = data.map(mapFromDB);
+        storageService.set(storageKey, mapped);
+        return mapped;
       }
     } catch (err) {
       console.warn('[transactionService] Gagal load dari Supabase, memakai cache lokal:', err.message);
     }
 
-    let list = storageService.get(storageKey);
-    // Jika storage kosong
-    if (!list || !Array.isArray(list)) {
-      list = storeId === DEFAULT_STORE_ID ? INITIAL_TRANSACTIONS : [];
-      storageService.set(storageKey, list);
-    }
-    return list.map(mapFromDB);
+    let list = storageService.get(storageKey, []);
+    return Array.isArray(list) ? list.map(mapFromDB) : [];
   },
 
   /**
@@ -536,7 +524,11 @@ export const transactionService = {
   async clearHistory() {
     const storeId = storeService.getActiveStoreId();
     try {
-      await supabase.from('transactions').delete().eq('store_id', storeId);
+      if (storeId === DEFAULT_STORE_ID) {
+        await supabase.from('transactions').delete().or(`store_id.eq.${storeId},store_id.is.null`);
+      } else {
+        await supabase.from('transactions').delete().eq('store_id', storeId);
+      }
     } catch (err) {
       console.warn('[transactionService] clearHistory error di Supabase:', err);
     }

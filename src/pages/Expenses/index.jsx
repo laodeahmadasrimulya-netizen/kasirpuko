@@ -8,7 +8,7 @@ import {
 import { useExpenses } from '../../context/ExpenseContext';
 import { useAuth } from '../../hooks/useAuth';
 import { formatIDR, formatNumber } from '../../utils/currency';
-import { formatDateOnly, isToday } from '../../utils/date';
+import { formatDateOnly, isToday, formatTime, getDateStringInStoreTZ } from '../../utils/date';
 import { Button } from '../../components/common/Button';
 import { Modal } from '../../components/common/Modal';
 
@@ -107,13 +107,10 @@ export const ExpensesPage = () => {
     return 'Kasir';
   };
 
-  // Helper to format time display: "00.19" or "21 Sep 2026, 14.30"
+  // Helper to format time display: "00.19 WITA" or "21 Sep 2026, 14.30 WITA"
   const formatExpenseTime = (isoString) => {
     if (!isoString) return '';
-    const d = new Date(isoString);
-    const hours = String(d.getHours()).padStart(2, '0');
-    const minutes = String(d.getMinutes()).padStart(2, '0');
-    const timeStr = `${hours}.${minutes}`;
+    const timeStr = formatTime(isoString);
     if (isToday(isoString)) {
       return timeStr;
     }
@@ -122,29 +119,33 @@ export const ExpensesPage = () => {
 
   const pengeluaranScrollRef = useRef(null);
 
+  // Today's date string in YYYY-MM-DD
+  const todayDateStr = useMemo(() => {
+    return getDateStringInStoreTZ(new Date());
+  }, []);
+
   // Generate 30 hari ke belakang berakhir di hari ini (urutan: hari terlama -> hari ini di paling kanan)
   const past30Days = useMemo(() => {
     const days = [];
     const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
-    const now = new Date();
+    const [tYear, tMonth, tDay] = (todayDateStr || '2026-01-01').split('-').map(Number);
 
     for (let i = 29; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(now.getDate() - i);
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
+      const d = new Date(Date.UTC(tYear, tMonth - 1, tDay - i));
+      const year = d.getUTCFullYear();
+      const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(d.getUTCDate()).padStart(2, '0');
       const dateStr = `${year}-${month}-${day}`;
 
       days.push({
         dateStr,
-        dayName: DAY_NAMES[d.getDay()], // e.g. "Jum", "Sab"
-        dayNumber: d.getDate(), // e.g. 18, 23
+        dayName: DAY_NAMES[d.getUTCDay()], // e.g. "Jum", "Sab"
+        dayNumber: d.getUTCDate(), // e.g. 18, 23
         isToday: i === 0,
       });
     }
     return days;
-  }, []);
+  }, [todayDateStr]);
 
   // Otomatis geser scroll ke paling kanan (Hari Ini) saat pertama buka
   useEffect(() => {
@@ -153,26 +154,13 @@ export const ExpensesPage = () => {
     }
   }, []);
 
-  // Today's date string in YYYY-MM-DD
-  const todayDateStr = useMemo(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }, []);
-
   // Selected date state (defaults to today)
   const [selectedDate, setSelectedDate] = useState(todayDateStr);
 
   // Helper to match expense timestamp with selectedDate string
   const isSameDate = (isoString, targetDateStr) => {
     if (!isoString || !targetDateStr) return false;
-    const d = new Date(isoString);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}` === targetDateStr;
+    return getDateStringInStoreTZ(isoString) === targetDateStr;
   };
 
   // Filter expenses for selected date
