@@ -109,58 +109,74 @@ export const ProductsPage = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div
           onClick={() => setSelectedCategory('Semua')}
-          className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none ${
+          className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none bg-white ${
             selectedCategory === 'Semua'
-              ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200/80 hover:border-slate-400 hover:bg-slate-50/50'
+              ? 'border-slate-800 shadow-md ring-2 ring-slate-800/10'
+              : 'border-slate-200/90 hover:border-slate-300 hover:shadow-xs'
           }`}
         >
-          <span className="text-[11px] font-semibold block opacity-80 uppercase tracking-wider">
+          <span
+            className={`text-[11px] font-semibold block uppercase tracking-wider ${
+              selectedCategory === 'Semua' ? 'text-slate-900 font-bold' : 'text-slate-500'
+            }`}
+          >
             Semua Kategori
           </span>
-          <span className="text-xl font-extrabold mt-0.5 block">{totalCount}</span>
+          <span className="text-xl font-extrabold mt-0.5 block text-slate-900">{totalCount}</span>
         </div>
 
         <div
           onClick={() => setSelectedCategory('Alpukat Kocok')}
-          className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none ${
+          className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none bg-white ${
             selectedCategory === 'Alpukat Kocok'
-              ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200/80 hover:border-slate-400 hover:bg-slate-50/50'
+              ? 'border-slate-800 shadow-md ring-2 ring-slate-800/10'
+              : 'border-slate-200/90 hover:border-slate-300 hover:shadow-xs'
           }`}
         >
-          <span className="text-[11px] font-semibold block opacity-80 uppercase tracking-wider">
+          <span
+            className={`text-[11px] font-semibold block uppercase tracking-wider ${
+              selectedCategory === 'Alpukat Kocok' ? 'text-slate-900 font-bold' : 'text-slate-500'
+            }`}
+          >
             Alpukat Kocok
           </span>
-          <span className="text-xl font-extrabold mt-0.5 block">{alpukatCount}</span>
+          <span className="text-xl font-extrabold mt-0.5 block text-slate-900">{alpukatCount}</span>
         </div>
 
         <div
           onClick={() => setSelectedCategory('Topping')}
-          className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none ${
+          className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none bg-white ${
             selectedCategory === 'Topping'
-              ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200/80 hover:border-slate-400 hover:bg-slate-50/50'
+              ? 'border-slate-800 shadow-md ring-2 ring-slate-800/10'
+              : 'border-slate-200/90 hover:border-slate-300 hover:shadow-xs'
           }`}
         >
-          <span className="text-[11px] font-semibold block opacity-80 uppercase tracking-wider">
+          <span
+            className={`text-[11px] font-semibold block uppercase tracking-wider ${
+              selectedCategory === 'Topping' ? 'text-slate-900 font-bold' : 'text-slate-500'
+            }`}
+          >
             Topping
           </span>
-          <span className="text-xl font-extrabold mt-0.5 block">{toppingCount}</span>
+          <span className="text-xl font-extrabold mt-0.5 block text-slate-900">{toppingCount}</span>
         </div>
 
         <div
           onClick={() => setSelectedCategory('Minuman Tambahan')}
-          className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none ${
+          className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none bg-white ${
             selectedCategory === 'Minuman Tambahan'
-              ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200/80 hover:border-slate-400 hover:bg-slate-50/50'
+              ? 'border-slate-800 shadow-md ring-2 ring-slate-800/10'
+              : 'border-slate-200/90 hover:border-slate-300 hover:shadow-xs'
           }`}
         >
-          <span className="text-[11px] font-semibold block opacity-80 uppercase tracking-wider">
+          <span
+            className={`text-[11px] font-semibold block uppercase tracking-wider ${
+              selectedCategory === 'Minuman Tambahan' ? 'text-slate-900 font-bold' : 'text-slate-500'
+            }`}
+          >
             Minuman Tambahan
           </span>
-          <span className="text-xl font-extrabold mt-0.5 block">{minumanCount}</span>
+          <span className="text-xl font-extrabold mt-0.5 block text-slate-900">{minumanCount}</span>
         </div>
       </div>
 
@@ -186,8 +202,8 @@ export const ProductsPage = () => {
                   px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-150 select-none cursor-pointer
                   ${
                     selectedCategory === cat
-                      ? 'bg-slate-900 text-white shadow-sm'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      ? 'bg-white text-slate-900 border border-slate-300 shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-transparent'
                   }
                 `}
               >
