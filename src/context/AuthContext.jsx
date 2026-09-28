@@ -951,12 +951,14 @@ export const AuthProvider = ({ children }) => {
 
     const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail);
     if (error) {
+      const errLower = (error.message || '').toLowerCase();
       if (
-        error.message.toLowerCase().includes('rate limit') ||
-        error.message.toLowerCase().includes('sending confirmation')
+        errLower.includes('rate limit') ||
+        errLower.includes('sending confirmation') ||
+        errLower.includes('error sending recovery email')
       ) {
         throw new Error(
-          'Server Supabase membatasi pengiriman email (maksimal 3 email per jam). Silakan coba lagi beberapa saat.'
+          'Server email Supabase saat ini membatasi pengiriman email ("Error sending recovery email"). Silakan gunakan Verifikasi via No. HP Pemilik di bawah ini untuk pemulihan instan.'
         );
       }
       throw new Error(error.message || 'Gagal mengirim email verifikasi pemulihan sandi.');
@@ -1044,14 +1046,13 @@ export const AuthProvider = ({ children }) => {
         targetUser?.id ||
         (cleanEmail === OWNER_EMAIL.toLowerCase() ? 'usr-admin' : null);
       if (dbId) {
-        supabase
+        await supabase
           .from('users')
           .update({ pin: cleanPassword })
-          .eq('id', dbId)
-          .then(() => {});
+          .eq('id', dbId);
       }
     } catch (e) {
-      // ignore
+      console.warn('Failed to sync public.users pin:', e);
     }
 
     return {
@@ -1077,6 +1078,12 @@ export const AuthProvider = ({ children }) => {
       }
     } catch {
       // ignore
+    }
+
+    const knownAdminPhones = ['082366976445', '085652103647'].map(normalizePhone);
+    if (knownAdminPhones.includes(targetPhone)) {
+      const admin = users.find((u) => u.id === 'usr-admin' || u.role === 'ADMIN');
+      if (admin) return admin;
     }
 
     const adminUser = users.find(
