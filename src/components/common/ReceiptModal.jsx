@@ -16,6 +16,7 @@ import { useAuth } from '../../context/AuthContext';
 import { playPrintReceiptSound } from '../../utils/sound';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import { Capacitor } from '@capacitor/core';
 import { downloadOrShareFile } from '../../utils/fileDownloader';
 
 export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
@@ -162,8 +163,9 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
     if (!el) return null;
 
     return await html2canvas(el, {
-      scale: 3, // 3x pixel ratio for sharp text and thermal clarity
+      scale: 2, // 2x ratio is sharp for thermal clarity and reliable on mobile RAM
       useCORS: true,
+      allowTaint: false,
       logging: false,
       backgroundColor: '#ffffff',
       onclone: (clonedDoc, clonedEl) => {
@@ -241,10 +243,23 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
       });
     } catch (err) {
       console.error('Failed to save receipt image:', err);
-      alert('Gagal mengunduh struk. Mengalihkan ke opsi cetak struk...');
-      handlePrint();
+      alert('Gagal memproses struk. Silakan coba lagi.');
     } finally {
       setIsExportingPdf(false);
+    }
+  };
+
+  // Cetak Struk Handler: Pada HP membuka dialog cetak/share Android (Bluetooth print / WhatsApp), pada PC membuka dialog printer
+  const handlePrintClick = async () => {
+    const isMobileOrNative =
+      Capacitor.isNativePlatform() ||
+      (typeof navigator !== 'undefined' &&
+        /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || ''));
+
+    if (isMobileOrNative) {
+      await handleSaveImage();
+    } else {
+      handlePrint();
     }
   };
 
@@ -313,6 +328,7 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
                 <img
                   src="/logo.png"
                   alt="PUKO Logo"
+                  crossOrigin="anonymous"
                   className="w-full h-full object-contain"
                 />
               </div>
@@ -470,6 +486,18 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
 
         {/* Action Buttons: Cetak, Simpan PDF & Simpan Gambar */}
         <div className="w-full space-y-2 mt-5">
+          <Button
+            variant="primary"
+            size="md"
+            fullWidth
+            onClick={handlePrintClick}
+            disabled={isExportingPdf}
+            icon={Printer}
+            className="font-bold bg-puko-600 hover:bg-puko-700 shadow-md shadow-puko-700/20 py-2.5"
+          >
+            {isExportingPdf ? 'Memproses Struk...' : 'Cetak / Bagikan Struk'}
+          </Button>
+
           <div className="grid grid-cols-2 gap-2">
             <Button
               variant="outline"
@@ -479,7 +507,7 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
               icon={Download}
               className="font-bold border-slate-300 text-xs sm:text-sm"
             >
-              {isExportingPdf ? 'Mengunduh...' : 'Simpan PDF'}
+              Simpan PDF
             </Button>
 
             <Button
@@ -493,17 +521,6 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
               Simpan Gambar (JPG)
             </Button>
           </div>
-
-          <Button
-            variant="primary"
-            size="md"
-            fullWidth
-            onClick={handlePrint}
-            icon={Printer}
-            className="font-bold bg-puko-600 hover:bg-puko-700 shadow-md shadow-puko-700/20 py-2.5"
-          >
-            Cetak Struk
-          </Button>
         </div>
 
         <div className="w-full mt-2">

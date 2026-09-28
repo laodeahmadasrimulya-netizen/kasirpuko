@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import { Capacitor } from '@capacitor/core';
 import { exportTransactionsToExcel } from '../../utils/excelExport';
 import { downloadOrShareFile } from '../../utils/fileDownloader';
 import { useTransactions } from '../../context/TransactionContext';
@@ -434,11 +435,12 @@ export const TransactionsPage = () => {
 
     try {
       // Pastikan render DOM stabil
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: 1.5, // 1.5x scale saves RAM on mobile while remaining sharp on A4 PDF
         useCORS: true,
+        allowTaint: false,
         logging: false,
         backgroundColor: '#ffffff',
       });
@@ -454,7 +456,7 @@ export const TransactionsPage = () => {
       let heightLeft = imgHeight;
       let position = 0;
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
 
       // Halaman pertama
       pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
@@ -485,8 +487,7 @@ export const TransactionsPage = () => {
       });
     } catch (err) {
       console.error('Failed to export PDF:', err);
-      alert('Terjadi kesalahan saat generate PDF. Mengalihkan ke dialog cetak dokumen...');
-      handlePrint();
+      alert('Gagal membuat dokumen PDF: ' + (err?.message || 'Silakan coba lagi.'));
     } finally {
       setIsExportingPdf(false);
     }
@@ -570,6 +571,20 @@ export const TransactionsPage = () => {
     } catch (e) {
       console.warn('Iframe print error, falling back to window.print():', e);
       window.print();
+    }
+  };
+
+  // Handler Cetak Dokumen: Pada HP membuka PDF/Share, pada PC membuka print dialog browser
+  const handlePrintClick = () => {
+    const isMobileOrNative =
+      Capacitor.isNativePlatform() ||
+      (typeof navigator !== 'undefined' &&
+        /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || ''));
+
+    if (isMobileOrNative) {
+      handleSavePdf();
+    } else {
+      handlePrint();
     }
   };
 
@@ -1021,7 +1036,7 @@ export const TransactionsPage = () => {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handlePrint}
+                onClick={handlePrintClick}
                 icon={Printer}
                 className="flex-1 sm:flex-none"
               >
@@ -1070,6 +1085,7 @@ export const TransactionsPage = () => {
                     <img
                       src="/logo.png"
                       alt="Logo PUKO"
+                      crossOrigin="anonymous"
                       style={{
                         width: reportFormat === 'mobile' ? '38px' : '44px',
                         height: reportFormat === 'mobile' ? '38px' : '44px',
