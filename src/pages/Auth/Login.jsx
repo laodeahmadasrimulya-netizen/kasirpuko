@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   User,
   ArrowRight,
+  ArrowLeft,
   AlertCircle,
   Lock,
   Eye,
@@ -10,9 +11,10 @@ import {
   Mail,
   RefreshCw,
   CheckCircle2,
-  HelpCircle,
   X,
-  Sparkles,
+  KeyRound,
+  ShieldCheck,
+  Clock,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { playSuccessSound } from '../../utils/sound';
@@ -24,6 +26,10 @@ export const LoginPage = () => {
     login,
     loginWithGoogle,
     signUpWithEmail,
+    sendPasswordResetOtp,
+    verifyPasswordResetOtp,
+    updatePasswordAfterReset,
+    ownerEmail,
   } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -66,8 +72,41 @@ export const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
-  // Modal Bantuan Lupa Password
-  const [showForgotHelp, setShowForgotHelp] = useState(false);
+  // ==============================================================
+  // Modal Pemulihan Kata Sandi via Gmail (Pilihan A)
+  // Step: 'EMAIL' | 'OTP' | 'NEW_PASSWORD'
+  // ==============================================================
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
+  const [forgotStep, setForgotStep] = useState('EMAIL');
+  const [forgotEmail, setForgotEmail] = useState(ownerEmail || 'alpukatkocokpuko@gmail.com');
+  const [forgotOtpDigits, setForgotOtpDigits] = useState(['', '', '', '', '', '']);
+  const [forgotCountdown, setForgotCountdown] = useState(0);
+  const [isSendingForgot, setIsSendingForgot] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const otpInputRefs = useRef([]);
+
+  // Countdown timer for resend OTP
+  useEffect(() => {
+    let timer;
+    if (isForgotModalOpen && forgotStep === 'OTP' && forgotCountdown > 0) {
+      timer = setTimeout(() => setForgotCountdown((prev) => prev - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [isForgotModalOpen, forgotStep, forgotCountdown]);
+
+  // Auto-focus first input when moving to OTP step
+  useEffect(() => {
+    if (isForgotModalOpen && forgotStep === 'OTP') {
+      setTimeout(() => {
+        otpInputRefs.current[0]?.focus();
+      }, 150);
+    }
+  }, [isForgotModalOpen, forgotStep]);
 
   // Switch mode helper
   const switchMode = (newMode) => {
@@ -92,7 +131,6 @@ export const LoginPage = () => {
         navigate(redirectPath, { replace: true });
       } else {
         if (result.code === 'EMAIL_NOT_CONFIRMED') {
-          // Redirect immediately to /verify-email
           navigate('/verify-email', {
             state: { email: result.email || loginIdentifier },
           });
@@ -107,7 +145,7 @@ export const LoginPage = () => {
     }
   };
 
-  // 2. Submit LOGIN DENGAN GOOGLE (1-Click Google OAuth)
+  // 2. Submit LOGIN DENGAN GOOGLE
   const handleGoogleLogin = async () => {
     setError('');
     setSuccessMessage('');
@@ -119,14 +157,13 @@ export const LoginPage = () => {
         setError(res.message);
         setIsGoogleLoading(false);
       }
-      // Jika berhasil, Supabase akan otomatis me-redirect ke Google
     } catch (err) {
       setError(err.message || 'Gagal menghubungkan dengan Google. Coba lagi.');
       setIsGoogleLoading(false);
     }
   };
 
-  // 3. Submit REGISTER (Email baru)
+  // 3. Submit REGISTER
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -160,6 +197,157 @@ export const LoginPage = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // ==============================================================
+  // Handlers untuk Lupa Password via Gmail
+  // ==============================================================
+  // Step 1: Kirim Kode OTP ke Gmail
+  const handleSendGmailOtp = async (e) => {
+    if (e) e.preventDefault();
+    setForgotError('');
+    setIsSendingForgot(true);
+
+    try {
+      const cleanEmail = (forgotEmail || '').trim().toLowerCase();
+      if (!cleanEmail) {
+        setForgotError('Masukkan alamat email Gmail akun Anda.');
+        setIsSendingForgot(false);
+        return;
+      }
+
+      await sendPasswordResetOtp(cleanEmail);
+      playSuccessSound();
+      setForgotCountdown(60);
+      setForgotStep('OTP');
+      setForgotOtpDigits(['', '', '', '', '', '']);
+    } catch (err) {
+      setForgotError(err.message || 'Gagal mengirim kode ke Gmail. Coba lagi.');
+    } finally {
+      setIsSendingForgot(false);
+    }
+  };
+
+  // Step 2: Kirim Ulang Kode
+  const handleResendGmailOtp = async () => {
+    if (forgotCountdown > 0 || isSendingForgot) return;
+    await handleSendGmailOtp();
+  };
+
+  // Step 2: Digit change handlers
+  const handleOtpDigitChange = (index, value) => {
+    const cleanVal = value.replace(/\D/g, '');
+    if (!cleanVal) {
+      const next = [...forgotOtpDigits];
+      next[index] = '';
+      setForgotOtpDigits(next);
+      return;
+    }
+
+    if (cleanVal.length > 1) {
+      const chars = cleanVal.slice(0, 6).split('');
+      const next = [...forgotOtpDigits];
+      chars.forEach((c, idx) => {
+        if (index + idx < 6) next[index + idx] = c;
+      });
+      setForgotOtpDigits(next);
+      const nextFocus = Math.min(index + chars.length, 5);
+      otpInputRefs.current[nextFocus]?.focus();
+      return;
+    }
+
+    const next = [...forgotOtpDigits];
+    next[index] = cleanVal;
+    setForgotOtpDigits(next);
+    if (index < 5 && cleanVal) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !forgotOtpDigits[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e) => {
+    e.preventDefault();
+    const pasteData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (!pasteData) return;
+    const chars = pasteData.split('');
+    const next = ['', '', '', '', '', ''];
+    chars.forEach((c, idx) => {
+      if (idx < 6) next[idx] = c;
+    });
+    setForgotOtpDigits(next);
+    const nextFocus = Math.min(chars.length, 5);
+    otpInputRefs.current[nextFocus]?.focus();
+  };
+
+  // Step 2: Verifikasi Kode OTP dari Gmail
+  const handleVerifyGmailOtp = async (e) => {
+    if (e) e.preventDefault();
+    setForgotError('');
+
+    const token = forgotOtpDigits.join('').trim();
+    if (token.length !== 6) {
+      setForgotError('Masukkan 6 digit kode OTP secara lengkap.');
+      return;
+    }
+
+    setIsSendingForgot(true);
+    try {
+      await verifyPasswordResetOtp(forgotEmail, token);
+      playSuccessSound();
+      setForgotStep('NEW_PASSWORD');
+    } catch (err) {
+      setForgotError(err.message || 'Kode OTP salah atau sudah kadaluarsa.');
+    } finally {
+      setIsSendingForgot(false);
+    }
+  };
+
+  // Step 3: Simpan Sandi Baru
+  const handleSaveNewPassword = async (e) => {
+    e.preventDefault();
+    setForgotError('');
+
+    if (newPassword.length < 6) {
+      setForgotError('Kata sandi baru minimal 6 karakter.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setForgotError('Konfirmasi kata sandi tidak cocok.');
+      return;
+    }
+
+    setIsSendingForgot(true);
+    try {
+      const res = await updatePasswordAfterReset(forgotEmail, newPassword);
+      playSuccessSound();
+      setSuccessMessage(res.message || 'Kata sandi berhasil diperbarui! Silakan masuk.');
+      setLoginIdentifier(forgotEmail);
+      setLoginPassword(newPassword);
+      closeForgotModal();
+    } catch (err) {
+      setForgotError(err.message || 'Gagal menyimpan kata sandi baru.');
+    } finally {
+      setIsSendingForgot(false);
+    }
+  };
+
+  const closeForgotModal = () => {
+    setIsForgotModalOpen(false);
+    setForgotStep('EMAIL');
+    setForgotEmail(ownerEmail || 'alpukatkocokpuko@gmail.com');
+    setForgotOtpDigits(['', '', '', '', '', '']);
+    setForgotCountdown(0);
+    setForgotError('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
   };
 
   return (
@@ -219,7 +407,7 @@ export const LoginPage = () => {
                   Masuk ke Aplikasi
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Gunakan username & password atau masuk langsung via Google
+                  Gunakan username, no. HP, atau email Gmail terdaftar
                 </p>
               </div>
 
@@ -236,7 +424,7 @@ export const LoginPage = () => {
                       type="text"
                       value={loginIdentifier}
                       onChange={(e) => setLoginIdentifier(e.target.value)}
-                      placeholder="Contoh: Owner, admin, atau 0856xxxxxx"
+                      placeholder="Contoh: Owner, 0856xxxxxx, atau Gmail"
                       required
                       className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white transition-all font-sans"
                     />
@@ -250,7 +438,7 @@ export const LoginPage = () => {
                     </label>
                     <button
                       type="button"
-                      onClick={() => setShowForgotHelp(true)}
+                      onClick={() => setIsForgotModalOpen(true)}
                       className="text-xs text-puko-700 hover:text-puko-800 font-bold hover:underline cursor-pointer"
                     >
                       Lupa Password?
@@ -477,55 +665,6 @@ export const LoginPage = () => {
                     </>
                   )}
                 </button>
-
-                {/* Divider ATAU */}
-                <div className="relative my-3 pt-1">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-slate-200"></div>
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-white px-2.5 text-slate-400 font-extrabold tracking-wider">
-                      Atau
-                    </span>
-                  </div>
-                </div>
-
-                {/* Tombol Daftar Menggunakan Google */}
-                <button
-                  type="button"
-                  onClick={handleGoogleLogin}
-                  disabled={isLoading || isGoogleLoading}
-                  className="w-full py-3 px-4 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-extrabold text-sm shadow-xs hover:shadow-md active:scale-[0.99] transition-all flex items-center justify-center gap-3 cursor-pointer"
-                >
-                  {isGoogleLoading ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin text-slate-500" />
-                      <span>Menghubungkan ke Google...</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
-                        <path
-                          fill="#4285F4"
-                          d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.04h3.88c2.27-2.09 3.66-5.17 3.66-9.14z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.04c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.26v3.13C3.27 21.39 7.33 24 12 24z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.28 14.28c-.24-.72-.38-1.49-.38-2.28s.14-1.56.38-2.28V6.59H1.26C.46 8.19 0 9.99 0 12s.46 3.81 1.26 5.41l4.02-3.13z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.27 2.61 1.26 6.59l4.02 3.13c.95-2.83 3.6-4.97 6.72-4.97z"
-                        />
-                      </svg>
-                      <span>Daftar / Masuk via Google</span>
-                    </>
-                  )}
-                </button>
               </form>
 
               {/* Link kembali ke Login */}
@@ -551,28 +690,44 @@ export const LoginPage = () => {
         </p>
       </div>
 
-      {/* Modal Bantuan Lupa Password */}
-      {showForgotHelp && (
+      {/* ============================================================== */}
+      {/* Modal Lupa Password via Gmail (Pilihan A: 3 Langkah)             */}
+      {/* ============================================================== */}
+      {isForgotModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white border border-slate-200/90 rounded-3xl p-5 sm:p-7 max-w-md w-full shadow-2xl space-y-4 animate-scaleUp">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold shadow-xs">
-                  <HelpCircle className="w-5 h-5 text-amber-700" />
+                <div className="w-9 h-9 rounded-2xl bg-puko-100 text-puko-800 flex items-center justify-center font-bold shadow-xs">
+                  {forgotStep === 'EMAIL' ? (
+                    <Mail className="w-4 h-4 text-puko-700" />
+                  ) : forgotStep === 'OTP' ? (
+                    <KeyRound className="w-4 h-4 text-puko-700" />
+                  ) : (
+                    <ShieldCheck className="w-4 h-4 text-puko-700" />
+                  )}
                 </div>
                 <div>
                   <h3 className="font-black text-slate-900 text-sm">
-                    Bantuan Lupa Password
+                    {forgotStep === 'EMAIL'
+                      ? 'Lupa Kata Sandi'
+                      : forgotStep === 'OTP'
+                      ? 'Verifikasi Kode Gmail'
+                      : 'Buat Sandi Baru'}
                   </h3>
                   <p className="text-[11px] text-slate-500 font-medium">
-                    Panduan akses masuk akun Owner & Kasir
+                    {forgotStep === 'EMAIL'
+                      ? 'Langkah 1 dari 3: Masukkan alamat Gmail'
+                      : forgotStep === 'OTP'
+                      ? 'Langkah 2 dari 3: Masukkan 6 digit kode'
+                      : 'Langkah 3 dari 3: Tentukan kata sandi baru'}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setShowForgotHelp(false)}
+                onClick={closeForgotModal}
                 className="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
                 title="Tutup"
               >
@@ -580,64 +735,358 @@ export const LoginPage = () => {
               </button>
             </div>
 
-            {/* Content Cards */}
-            <div className="space-y-3">
-              {/* Info untuk Owner */}
-              <div className="p-4 rounded-2xl bg-puko-50/70 border border-puko-200/80 space-y-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-puko-600 text-white flex items-center justify-center text-xs font-black">
-                    👑
-                  </span>
-                  <h4 className="font-extrabold text-puko-950 text-xs">
-                    Untuk Akun Owner / Admin:
-                  </h4>
-                </div>
-                <p className="text-xs text-slate-700 leading-relaxed">
-                  Jika lupa kata sandi akun Owner, Anda tidak perlu repot reset password! Cukup gunakan tombol <b>"Masuk Menggunakan Google"</b> dengan akun Gmail Anda (contoh: <code>alpukatkocokpuko@gmail.com</code>).
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowForgotHelp(false);
-                    handleGoogleLogin();
-                  }}
-                  className="w-full py-2.5 px-3 rounded-xl bg-puko-600 hover:bg-puko-700 text-white font-extrabold text-xs shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+            {/* 3-Step Progress Indicator */}
+            <div className="flex items-center justify-between px-2 pt-1 pb-2">
+              {/* Step 1 */}
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                    forgotStep === 'EMAIL'
+                      ? 'bg-puko-600 text-white shadow-xs'
+                      : 'bg-emerald-500 text-white'
+                  }`}
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Langsung Masuk via Google Sekarang</span>
-                </button>
+                  {forgotStep !== 'EMAIL' ? '✓' : '1'}
+                </span>
+                <span
+                  className={`text-xs font-bold ${
+                    forgotStep === 'EMAIL' ? 'text-puko-700' : 'text-slate-500'
+                  }`}
+                >
+                  Email
+                </span>
               </div>
 
-              {/* Info untuk Kasir */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-slate-700 text-white flex items-center justify-center text-xs font-black">
-                    🥑
-                  </span>
-                  <h4 className="font-extrabold text-slate-900 text-xs">
-                    Untuk Akun Kasir Outlet:
-                  </h4>
+              <div
+                className={`flex-1 h-0.5 mx-2 rounded-full transition-all ${
+                  forgotStep !== 'EMAIL' ? 'bg-emerald-500' : 'bg-slate-200'
+                }`}
+              />
+
+              {/* Step 2 */}
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                    forgotStep === 'OTP'
+                      ? 'bg-puko-600 text-white shadow-xs'
+                      : forgotStep === 'NEW_PASSWORD'
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-slate-200 text-slate-500'
+                  }`}
+                >
+                  {forgotStep === 'NEW_PASSWORD' ? '✓' : '2'}
+                </span>
+                <span
+                  className={`text-xs font-bold ${
+                    forgotStep === 'OTP'
+                      ? 'text-puko-700'
+                      : forgotStep === 'NEW_PASSWORD'
+                      ? 'text-slate-600'
+                      : 'text-slate-400'
+                  }`}
+                >
+                  Kode OTP
+                </span>
+              </div>
+
+              <div
+                className={`flex-1 h-0.5 mx-2 rounded-full transition-all ${
+                  forgotStep === 'NEW_PASSWORD' ? 'bg-emerald-500' : 'bg-slate-200'
+                }`}
+              />
+
+              {/* Step 3 */}
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                    forgotStep === 'NEW_PASSWORD'
+                      ? 'bg-puko-600 text-white shadow-xs'
+                      : 'bg-slate-200 text-slate-500'
+                  }`}
+                >
+                  3
+                </span>
+                <span
+                  className={`text-xs font-bold ${
+                    forgotStep === 'NEW_PASSWORD' ? 'text-puko-700' : 'text-slate-400'
+                  }`}
+                >
+                  Sandi Baru
+                </span>
+              </div>
+            </div>
+
+            {/* Error Message inside modal */}
+            {forgotError && (
+              <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2.5 animate-shake">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                <span className="leading-relaxed font-semibold">{forgotError}</span>
+              </div>
+            )}
+
+            {/* ========================================================== */}
+            {/* STEP 1: INPUT EMAIL GMAIL                                  */}
+            {/* ========================================================== */}
+            {forgotStep === 'EMAIL' && (
+              <form onSubmit={handleSendGmailOtp} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Alamat Email (Gmail) Terdaftar
+                  </label>
+                  <p className="text-xs text-slate-500 mb-2.5 leading-relaxed">
+                    Masukkan alamat Gmail akun Anda. Kami akan mengirimkan 6 digit kode OTP verifikasi ke inbox Gmail Anda.
+                  </p>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Mail className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="email"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="alpukatkocokpuko@gmail.com"
+                      required
+                      autoFocus
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white font-sans transition-all"
+                    />
+                  </div>
                 </div>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Untuk kasir yang lupa password atau PIN, silakan hubungi <b>Owner</b> toko Anda. Owner dapat melihat atau mengubah PIN kasir kapan saja di menu:
-                  <br />
-                  <span className="font-bold text-slate-800">
-                    Pengaturan &rarr; Toko & Kasir &rarr; Kelola Akun Kasir
-                  </span>.
-                </p>
-              </div>
-            </div>
 
-            {/* Tombol Tutup */}
-            <div className="pt-1">
-              <button
-                type="button"
-                onClick={() => setShowForgotHelp(false)}
-                className="w-full py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
-              >
-                Tutup
-              </button>
-            </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={closeForgotModal}
+                    className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSendingForgot || !forgotEmail.trim()}
+                    className="flex-1 py-2.5 px-4 rounded-xl bg-puko-600 hover:bg-puko-700 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-puko-900/10 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isSendingForgot ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Mengirim Kode...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Kirim Kode ke Gmail</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* ========================================================== */}
+            {/* STEP 2: VERIFIKASI KODE OTP DARI GMAIL                     */}
+            {/* ========================================================== */}
+            {forgotStep === 'OTP' && (
+              <form onSubmit={handleVerifyGmailOtp} className="space-y-4">
+                {/* Info Box */}
+                <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-2xl p-3.5 text-center space-y-1.5">
+                  <div className="w-10 h-10 mx-auto rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs">
+                    <Mail className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-emerald-950 text-xs">
+                      Kode OTP Telah Dikirim!
+                    </h4>
+                    <p className="text-[11px] text-emerald-800 mt-0.5">
+                      Periksa kotak masuk (atau folder <b>Spam</b>) di Gmail:
+                    </p>
+                    <span className="inline-block mt-1 font-mono font-bold text-xs text-emerald-950 bg-white px-2.5 py-0.5 rounded-full border border-emerald-300">
+                      {forgotEmail}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 6 Digit Inputs */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 text-center">
+                    Masukkan 6 Digit Angka dari Gmail
+                  </label>
+
+                  <div
+                    className="flex items-center justify-center gap-2 sm:gap-2.5"
+                    onPaste={handleOtpPaste}
+                  >
+                    {forgotOtpDigits.map((digit, idx) => (
+                      <input
+                        key={idx}
+                        ref={(el) => (otpInputRefs.current[idx] = el)}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => handleOtpDigitChange(idx, e.target.value)}
+                        onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                        className={`w-11 h-13 sm:w-12 sm:h-14 text-center text-xl sm:text-2xl font-black rounded-2xl border-2 transition-all font-mono outline-none shadow-xs ${
+                          digit
+                            ? 'border-puko-600 bg-puko-50/50 text-slate-900 ring-2 ring-puko-500/20'
+                            : 'border-slate-200 bg-slate-50 text-slate-700 focus:border-puko-500 focus:bg-white focus:ring-4 focus:ring-puko-500/15'
+                        }`}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Resend Cooldown & Ubah Email */}
+                  <div className="flex items-center justify-between text-xs mt-3 text-slate-500 px-1">
+                    <button
+                      type="button"
+                      onClick={() => setForgotStep('EMAIL')}
+                      className="text-slate-500 hover:text-slate-800 font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Ganti Email</span>
+                    </button>
+
+                    <div>
+                      {forgotCountdown > 0 ? (
+                        <span className="text-slate-400 font-medium">
+                          Kirim ulang ({forgotCountdown}s)
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleResendGmailOtp}
+                          disabled={isSendingForgot}
+                          className="font-extrabold text-puko-700 hover:text-puko-800 hover:underline cursor-pointer transition-colors"
+                        >
+                          Kirim Ulang Kode
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={closeForgotModal}
+                    className="py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSendingForgot || forgotOtpDigits.join('').length !== 6}
+                    className="flex-1 py-2.5 px-4 rounded-xl bg-puko-600 hover:bg-puko-700 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-puko-900/10 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isSendingForgot ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    )}
+                    <span>Verifikasi Kode OTP</span>
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* ========================================================== */}
+            {/* STEP 3: BUAT KATA SANDI BARU                               */}
+            {/* ========================================================== */}
+            {forgotStep === 'NEW_PASSWORD' && (
+              <form onSubmit={handleSaveNewPassword} className="space-y-4">
+                {/* Verified Account Badge */}
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-900 flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold shrink-0">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="font-extrabold text-emerald-950 block">
+                      Kode Berhasil Diverifikasi!
+                    </span>
+                    <p className="text-[11px] text-emerald-700 truncate mt-0.5">
+                      Silakan buat kata sandi baru untuk <b>{forgotEmail}</b>.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Input New Password */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Kata Sandi Baru (Minimal 6 Karakter)
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Minimal 6 karakter"
+                      required
+                      autoFocus
+                      minLength={6}
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-10 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white font-mono transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-700 cursor-pointer"
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Input Confirm New Password */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Ulangi Kata Sandi Baru
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Ulangi kata sandi baru"
+                      required
+                      minLength={6}
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-10 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white font-mono transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-700 cursor-pointer"
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={closeForgotModal}
+                    className="py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSendingForgot}
+                    className="flex-1 py-2.5 px-4 rounded-xl bg-puko-600 hover:bg-puko-700 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-puko-900/10 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isSendingForgot ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    )}
+                    <span>Simpan Sandi Baru & Masuk</span>
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

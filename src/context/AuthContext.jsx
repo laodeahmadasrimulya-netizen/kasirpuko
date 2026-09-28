@@ -931,6 +931,138 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
+   * 1. Send 6-digit Password Reset OTP code to user's Gmail
+   */
+  const sendPasswordResetOtp = async (email) => {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail) throw new Error('Email Gmail wajib diisi.');
+
+    // Validasi apakah email terdaftar (Owner atau kasir dengan email)
+    const isOwner = cleanEmail === OWNER_EMAIL.toLowerCase();
+    const matched = users.find(
+      (u) =>
+        (u.email && u.email.toLowerCase() === cleanEmail) ||
+        (isOwner && (u.id === 'usr-admin' || u.role === 'ADMIN'))
+    );
+
+    if (!matched && !isOwner) {
+      throw new Error('Email ini tidak terdaftar pada akun mana pun di PUKO POS.');
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail);
+    if (error) {
+      if (
+        error.message.toLowerCase().includes('rate limit') ||
+        error.message.toLowerCase().includes('sending confirmation')
+      ) {
+        throw new Error(
+          'Server Supabase membatasi pengiriman email (maksimal 3 email per jam). Silakan coba lagi beberapa saat.'
+        );
+      }
+      throw new Error(error.message || 'Gagal mengirim email verifikasi pemulihan sandi.');
+    }
+
+    return { success: true, email: cleanEmail, user: matched };
+  };
+
+  /**
+   * 2. Verify 6-digit Recovery OTP from Gmail
+   */
+  const verifyPasswordResetOtp = async (email, token) => {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanToken = (token || '').trim();
+
+    if (!cleanToken) {
+      throw new Error('Kode OTP 6 digit wajib diisi.');
+    }
+
+    if (cleanToken.length !== 6 || !/^\d{6}$/.test(cleanToken)) {
+      throw new Error('Kode OTP harus terdiri dari 6 digit angka.');
+    }
+
+    let { data, error } = await supabase.auth.verifyOtp({
+      email: cleanEmail,
+      token: cleanToken,
+      type: 'recovery',
+    });
+
+    if (error) {
+      const retry = await supabase.auth.verifyOtp({
+        email: cleanEmail,
+        token: cleanToken,
+        type: 'email',
+      });
+      if (retry.error) {
+        throw new Error(
+          'Kode OTP salah atau sudah kadaluarsa. Pastikan 6 digit sesuai dengan pesan di Gmail Anda.'
+        );
+      }
+      data = retry.data;
+    }
+
+    return { success: true, user: data?.user };
+  };
+
+  /**
+   * 3. Update Password after OTP verification
+   */
+  const updatePasswordAfterReset = async (email, newPassword) => {
+    const cleanPassword = String(newPassword || '').trim();
+    const cleanEmail = (email || '').trim().toLowerCase();
+
+    if (!cleanPassword || cleanPassword.length < 6) {
+      throw new Error('Kata sandi baru minimal 6 karakter.');
+    }
+
+    // Update in Supabase Auth if session exists
+    try {
+      await supabase.auth.updateUser({ password: cleanPassword });
+    } catch (err) {
+      console.warn('supabase.auth.updateUser notice:', err);
+    }
+
+    // Update in local users state
+    let targetUser = null;
+    setUsers((prev) =>
+      prev.map((item) => {
+        const isMatch =
+          (item.email && item.email.toLowerCase() === cleanEmail) ||
+          (cleanEmail === OWNER_EMAIL.toLowerCase() &&
+            (item.id === 'usr-admin' || item.role === 'ADMIN'));
+
+        if (isMatch) {
+          targetUser = { ...item, pin: cleanPassword };
+          return targetUser;
+        }
+        return item;
+      })
+    );
+
+    // Sync to Supabase public.users
+    try {
+      const dbId =
+        targetUser?.id ||
+        (cleanEmail === OWNER_EMAIL.toLowerCase() ? 'usr-admin' : null);
+      if (dbId) {
+        supabase
+          .from('users')
+          .update({ pin: cleanPassword })
+          .eq('id', dbId)
+          .then(() => {});
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    return {
+      success: true,
+      user: targetUser,
+      message:
+        'Kata sandi berhasil diperbarui. Silakan masuk menggunakan kata sandi baru Anda.',
+    };
+  };
+
+  /**
    * Find user by registered phone number
    */
   const findUserByPhone = (phone) => {
@@ -1344,6 +1476,9 @@ export const AuthProvider = ({ children }) => {
     signUpWithEmail,
     verifyEmailOtp,
     resendOtp,
+    sendPasswordResetOtp,
+    verifyPasswordResetOtp,
+    updatePasswordAfterReset,
     quickLogin,
     findUserByPhone,
     resetPasswordWithPhone,
