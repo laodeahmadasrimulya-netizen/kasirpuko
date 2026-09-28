@@ -76,14 +76,14 @@ export const LoginPage = () => {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   // ==============================================================
-  // Modal Pemulihan Kata Sandi via Gmail (Pilihan A) & Phone Fallback
+  // Modal Pemulihan Kata Sandi (Simpel: Gmail / No HP)
   // Step: 'EMAIL' | 'OTP' | 'NEW_PASSWORD'
   // ==============================================================
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
   const [forgotStep, setForgotStep] = useState('EMAIL');
   const [forgotMethod, setForgotMethod] = useState('EMAIL'); // 'EMAIL' | 'PHONE'
-  const [forgotEmail, setForgotEmail] = useState(ownerEmail || 'alpukatkocokpuko@gmail.com');
-  const [forgotPhone, setForgotPhone] = useState('082366976445');
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotPhone, setForgotPhone] = useState('');
   const [forgotOtpDigits, setForgotOtpDigits] = useState(['', '', '', '', '', '']);
   const [forgotCountdown, setForgotCountdown] = useState(0);
   const [isSendingForgot, setIsSendingForgot] = useState(false);
@@ -312,24 +312,24 @@ export const LoginPage = () => {
     }
   };
 
-  // Step 1 Fallback: Verifikasi Nomor HP Pemilik (Bypass masalah server email Supabase)
+  // Step 1: Verifikasi Nomor HP Pemilik
   const handleVerifyPhone = (e) => {
     if (e) e.preventDefault();
     setForgotError('');
     const clean = (forgotPhone || '').replace(/\D/g, '');
     if (!clean || clean.length < 8) {
-      setForgotError('Masukkan nomor HP pemilik minimal 8 angka.');
+      setForgotError('Masukkan nomor HP akun Anda.');
       return;
     }
 
     const matched = findUserByPhone(clean);
     if (!matched) {
-      setForgotError('Nomor HP tidak cocok dengan nomor Owner yang terdaftar di akun PUKO.');
+      setForgotError('Nomor HP tidak cocok dengan akun terdaftar.');
       return;
     }
 
     playSuccessSound();
-    setForgotEmail(matched.email || ownerEmail || 'alpukatkocokpuko@gmail.com');
+    setForgotEmail(matched.email || '');
     setForgotStep('NEW_PASSWORD');
   };
 
@@ -373,8 +373,8 @@ export const LoginPage = () => {
     setIsForgotModalOpen(false);
     setForgotStep('EMAIL');
     setForgotMethod('EMAIL');
-    setForgotEmail(ownerEmail || 'alpukatkocokpuko@gmail.com');
-    setForgotPhone('082366976445');
+    setForgotEmail('');
+    setForgotPhone('');
     setForgotOtpDigits(['', '', '', '', '', '']);
     setForgotCountdown(0);
     setForgotError('');
@@ -731,33 +731,14 @@ export const LoginPage = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white border border-slate-200/90 rounded-3xl p-5 sm:p-7 max-w-md w-full shadow-2xl space-y-4 animate-scaleUp">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-2xl bg-puko-100 text-puko-800 flex items-center justify-center font-bold shadow-xs">
-                  {forgotStep === 'EMAIL' ? (
-                    <Mail className="w-4 h-4 text-puko-700" />
-                  ) : forgotStep === 'OTP' ? (
-                    <KeyRound className="w-4 h-4 text-puko-700" />
-                  ) : (
-                    <ShieldCheck className="w-4 h-4 text-puko-700" />
-                  )}
+                <div className="w-8 h-8 rounded-xl bg-puko-100 text-puko-800 flex items-center justify-center font-bold">
+                  <KeyRound className="w-4 h-4 text-puko-700" />
                 </div>
-                <div>
-                  <h3 className="font-black text-slate-900 text-sm">
-                    {forgotStep === 'EMAIL'
-                      ? 'Lupa Kata Sandi'
-                      : forgotStep === 'OTP'
-                      ? 'Verifikasi Kode Gmail'
-                      : 'Buat Sandi Baru'}
-                  </h3>
-                  <p className="text-[11px] text-slate-500 font-medium">
-                    {forgotStep === 'EMAIL'
-                      ? 'Langkah 1 dari 3: Masukkan alamat Gmail'
-                      : forgotStep === 'OTP'
-                      ? 'Langkah 2 dari 3: Masukkan 6 digit kode'
-                      : 'Langkah 3 dari 3: Tentukan kata sandi baru'}
-                  </p>
-                </div>
+                <h3 className="font-black text-slate-900 text-base">
+                  {forgotStep === 'NEW_PASSWORD' ? 'Buat Sandi Baru' : 'Lupa Sandi'}
+                </h3>
               </div>
               <button
                 type="button"
@@ -769,116 +750,35 @@ export const LoginPage = () => {
               </button>
             </div>
 
-            {/* 3-Step Progress Indicator */}
-            <div className="flex items-center justify-between px-2 pt-1 pb-2">
-              {/* Step 1 */}
-              <div className="flex items-center gap-1.5">
-                <span
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                    forgotStep === 'EMAIL'
-                      ? 'bg-puko-600 text-white shadow-xs'
-                      : 'bg-emerald-500 text-white'
-                  }`}
-                >
-                  {forgotStep !== 'EMAIL' ? '✓' : '1'}
-                </span>
-                <span
-                  className={`text-xs font-bold ${
-                    forgotStep === 'EMAIL' ? 'text-puko-700' : 'text-slate-500'
-                  }`}
-                >
-                  Email
-                </span>
-              </div>
-
-              <div
-                className={`flex-1 h-0.5 mx-2 rounded-full transition-all ${
-                  forgotStep !== 'EMAIL' ? 'bg-emerald-500' : 'bg-slate-200'
-                }`}
-              />
-
-              {/* Step 2 */}
-              <div className="flex items-center gap-1.5">
-                <span
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                    forgotStep === 'OTP'
-                      ? 'bg-puko-600 text-white shadow-xs'
-                      : forgotStep === 'NEW_PASSWORD'
-                      ? 'bg-emerald-500 text-white'
-                      : 'bg-slate-200 text-slate-500'
-                  }`}
-                >
-                  {forgotStep === 'NEW_PASSWORD' ? '✓' : '2'}
-                </span>
-                <span
-                  className={`text-xs font-bold ${
-                    forgotStep === 'OTP'
-                      ? 'text-puko-700'
-                      : forgotStep === 'NEW_PASSWORD'
-                      ? 'text-slate-600'
-                      : 'text-slate-400'
-                  }`}
-                >
-                  Kode OTP
-                </span>
-              </div>
-
-              <div
-                className={`flex-1 h-0.5 mx-2 rounded-full transition-all ${
-                  forgotStep === 'NEW_PASSWORD' ? 'bg-emerald-500' : 'bg-slate-200'
-                }`}
-              />
-
-              {/* Step 3 */}
-              <div className="flex items-center gap-1.5">
-                <span
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                    forgotStep === 'NEW_PASSWORD'
-                      ? 'bg-puko-600 text-white shadow-xs'
-                      : 'bg-slate-200 text-slate-500'
-                  }`}
-                >
-                  3
-                </span>
-                <span
-                  className={`text-xs font-bold ${
-                    forgotStep === 'NEW_PASSWORD' ? 'text-puko-700' : 'text-slate-400'
-                  }`}
-                >
-                  Sandi Baru
-                </span>
-              </div>
-            </div>
-
             {/* Error Message inside modal */}
             {forgotError && (
-              <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2.5 animate-shake">
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2.5 animate-shake">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
                 <span className="leading-relaxed font-semibold">{forgotError}</span>
               </div>
             )}
 
             {/* ========================================================== */}
-            {/* STEP 1: PILIHAN VERIFIKASI (GMAIL OTP / NO. HP)            */}
+            {/* STEP 1: PILIHAN VERIFIKASI (GMAIL / NO. HP)                */}
             {/* ========================================================== */}
             {forgotStep === 'EMAIL' && (
               <div className="space-y-4">
-                {/* Method Switcher Tabs */}
-                <div className="flex bg-slate-100 p-1 rounded-xl">
+                {/* Pilihan Metode: Gmail atau No HP */}
+                <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
                   <button
                     type="button"
                     onClick={() => {
                       setForgotMethod('EMAIL');
                       setForgotError('');
                     }}
-                    className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                       forgotMethod === 'EMAIL'
-                        ? 'bg-white text-slate-800 shadow-xs'
+                        ? 'bg-white text-slate-900 shadow-xs'
                         : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
                     <Mail className="w-3.5 h-3.5" />
-                    <span>Kode OTP Gmail</span>
+                    <span>Gmail</span>
                   </button>
                   <button
                     type="button"
@@ -886,30 +786,24 @@ export const LoginPage = () => {
                       setForgotMethod('PHONE');
                       setForgotError('');
                     }}
-                    className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                       forgotMethod === 'PHONE'
-                        ? 'bg-white text-puko-700 shadow-xs font-extrabold'
+                        ? 'bg-white text-slate-900 shadow-xs'
                         : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
-                    <Phone className="w-3.5 h-3.5 text-puko-600" />
-                    <span>No. HP Pemilik</span>
-                    <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold">
-                      Instan
-                    </span>
+                    <Phone className="w-3.5 h-3.5" />
+                    <span>Nomor HP</span>
                   </button>
                 </div>
 
-                {/* Sub-form 1: Gmail OTP */}
+                {/* Sub-form: Gmail */}
                 {forgotMethod === 'EMAIL' ? (
                   <form onSubmit={handleSendGmailOtp} className="space-y-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                        Alamat Email (Gmail) Terdaftar
+                        Alamat Email (Gmail)
                       </label>
-                      <p className="text-xs text-slate-500 mb-2.5 leading-relaxed">
-                        Masukkan alamat Gmail akun Anda. Kami akan mengirimkan 6 digit kode OTP verifikasi ke inbox Gmail Anda.
-                      </p>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                           <Mail className="w-4 h-4" />
@@ -918,32 +812,13 @@ export const LoginPage = () => {
                           type="email"
                           value={forgotEmail}
                           onChange={(e) => setForgotEmail(e.target.value)}
-                          placeholder="alpukatkocokpuko@gmail.com"
+                          placeholder="contoh@gmail.com"
                           required
                           autoFocus
                           className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white font-sans transition-all"
                         />
                       </div>
                     </div>
-
-                    {forgotError && (
-                      <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex flex-col gap-2">
-                        <p className="text-xs text-amber-900 font-medium">
-                          Terkendala batas pengiriman email Supabase? Anda dapat langsung mereset sandi menggunakan verifikasi No. HP Pemilik tanpa perlu kode email.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setForgotMethod('PHONE');
-                            setForgotError('');
-                          }}
-                          className="py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-                        >
-                          <Phone className="w-3.5 h-3.5" />
-                          <span>Gunakan Verifikasi No. HP Pemilik (Instan)</span>
-                        </button>
-                      </div>
-                    )}
 
                     <div className="flex items-center gap-2 pt-1">
                       <button
@@ -965,7 +840,7 @@ export const LoginPage = () => {
                           </>
                         ) : (
                           <>
-                            <span>Kirim Kode ke Gmail</span>
+                            <span>Kirim Kode</span>
                             <ArrowRight className="w-3.5 h-3.5" />
                           </>
                         )}
@@ -973,15 +848,12 @@ export const LoginPage = () => {
                     </div>
                   </form>
                 ) : (
-                  /* Sub-form 2: Verifikasi No. HP Pemilik */
+                  /* Sub-form: Nomor HP */
                   <form onSubmit={handleVerifyPhone} className="space-y-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                        Nomor WhatsApp / HP Akun Owner
+                        Nomor HP
                       </label>
-                      <p className="text-xs text-slate-500 mb-2.5 leading-relaxed">
-                        Masukkan nomor HP akun Owner (contoh: <b>082366976445</b> atau <b>085652103647</b>). Tanpa perlu menunggu kode email, Anda bisa langsung membuat sandi baru!
-                      </p>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                           <Phone className="w-4 h-4" />
@@ -990,10 +862,10 @@ export const LoginPage = () => {
                           type="tel"
                           value={forgotPhone}
                           onChange={(e) => setForgotPhone(e.target.value)}
-                          placeholder="082366976445"
+                          placeholder="081234567890"
                           required
                           autoFocus
-                          className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white font-mono font-bold transition-all"
+                          className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 focus:bg-white font-mono transition-all"
                         />
                       </div>
                     </div>
@@ -1009,10 +881,10 @@ export const LoginPage = () => {
                       <button
                         type="submit"
                         disabled={isSendingForgot || !forgotPhone.trim()}
-                        className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-emerald-900/10 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        className="flex-1 py-2.5 px-4 rounded-xl bg-puko-600 hover:bg-puko-700 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-puko-900/10 transition-all flex items-center justify-center gap-2 cursor-pointer"
                       >
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                        <span>Verifikasi & Buat Sandi</span>
+                        <span>Lanjut</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </form>
@@ -1138,12 +1010,10 @@ export const LoginPage = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <span className="font-extrabold text-emerald-950 block">
-                      {forgotMethod === 'PHONE'
-                        ? 'Identitas Pemilik Berhasil Diverifikasi!'
-                        : 'Kode Berhasil Diverifikasi!'}
+                      Verifikasi Berhasil!
                     </span>
                     <p className="text-[11px] text-emerald-700 truncate mt-0.5">
-                      Silakan buat kata sandi baru untuk akun Owner <b>{forgotEmail}</b>.
+                      Silakan buat kata sandi baru untuk akun Anda.
                     </p>
                   </div>
                 </div>
