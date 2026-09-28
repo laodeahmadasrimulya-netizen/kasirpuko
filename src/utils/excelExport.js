@@ -977,5 +977,23 @@ export const exportTransactionsToExcel = (
   const filename = `Laporan-Lengkap-PUKO-${cleanPeriod}-${dateStr}.xlsx`;
 
   // Download langsung ke perangkat pengguna dengan style aktif
-  XLSX.writeFile(wb, filename);
+  try {
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      if (link.parentNode) link.parentNode.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, 1500);
+  } catch (err) {
+    console.warn('Fallback to XLSX.writeFile:', err);
+    XLSX.writeFile(wb, filename);
+  }
 };

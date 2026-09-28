@@ -24,7 +24,8 @@ import {
   ChevronDown,
   FileSpreadsheet,
 } from 'lucide-react';
-import html2pdf from 'html2pdf.js';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import { exportTransactionsToExcel } from '../../utils/excelExport';
 import { useTransactions } from '../../context/TransactionContext';
 import { useSettings } from '../../context/SettingsContext';
@@ -424,114 +425,181 @@ export const TransactionsPage = () => {
     return name.toLowerCase().includes('kasir') ? name : `Kasir (${name})`;
   }, [isAdmin, user, settings]);
 
-  // Download PDF using html2pdf.js with full A4 multi-page document layout
+  // Download PDF using direct html2canvas + jsPDF with full multi-page A4 document layout
   const handleSavePdf = async () => {
     const element = reportRef.current;
     if (!element) return;
     setIsExportingPdf(true);
 
-    const prevScrollY = window.scrollY;
-    const prevScrollX = window.scrollX;
-
     try {
-      window.scrollTo(0, 0);
-      const scrollableParent = element.closest('.overflow-y-auto');
-      const prevParentScrollTop = scrollableParent ? scrollableParent.scrollTop : 0;
-      if (scrollableParent) {
-        scrollableParent.scrollTop = 0;
+      // Pastikan render DOM stabil
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+      });
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      // Hitung proporsional tinggi gambar pada lebar A4
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+
+      // Halaman pertama
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      // Halaman berikutnya jika laporan melebihi 1 halaman A4
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
       }
 
-      const safeLabel = periodLabel.replace(/[^a-zA-Z0-9]/g, '_');
+      const safeLabel = (periodLabel || 'Semua').replace(/[^a-zA-Z0-9]/g, '_');
       const now = new Date();
       const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
       const filename = `Laporan_Transaksi_PUKO_${safeLabel}_${dateStr}.pdf`;
 
-      const opt = {
-        margin: [10, 8, 10, 8],
-        filename: filename,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          backgroundColor: '#ffffff',
-          scrollX: 0,
-          scrollY: 0,
-          onclone: (clonedDoc) => {
-            const el = clonedDoc.getElementById('printable-report');
-            if (el) {
-              el.style.boxShadow = 'none';
-              el.style.borderRadius = '0';
-              el.style.maxWidth = '100%';
-              el.style.width = '100%';
-              let parent = el.parentElement;
-              while (parent && parent !== clonedDoc.body) {
-                parent.style.overflow = 'visible';
-                parent.style.maxHeight = 'none';
-                parent.style.height = 'auto';
-                parent.style.position = 'static';
-                parent.style.transform = 'none';
-                parent = parent.parentElement;
-              }
-            }
-          },
-        },
-        jsPDF: {
-          unit: 'mm',
-          format: 'a4',
-          orientation: 'portrait',
-        },
-        pagebreak: {
-          mode: ['avoid-all', 'css', 'legacy'],
-          avoid: ['tr', 'table'],
-        },
-      };
-
-      await html2pdf().set(opt).from(element).save();
-
-      if (scrollableParent) {
-        scrollableParent.scrollTop = prevParentScrollTop;
-      }
+      pdf.save(filename);
     } catch (err) {
       console.error('Failed to export PDF:', err);
-      alert('Terjadi kesalahan saat generate PDF. Membuka dialog print browser...');
-      window.print();
+      alert('Terjadi kesalahan saat generate PDF. Mengalihkan ke dialog cetak dokumen...');
+      handlePrint();
     } finally {
-      window.scrollTo(prevScrollX, prevScrollY);
       setIsExportingPdf(false);
     }
   };
 
-  // Direct print action
+  // Direct print action using clean isolated iframe
   const handlePrint = () => {
     playPrintReceiptSound();
-    window.print();
+    const printEl = reportRef.current;
+    if (!printEl) {
+      window.print();
+      return;
+    }
+
+    try {
+      const oldIframe = document.getElementById('report-print-iframe');
+      if (oldIframe) oldIframe.remove();
+
+      const iframe = document.createElement('iframe');
+      iframe.id = 'report-print-iframe';
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.style.visibility = 'hidden';
+      document.body.appendChild(iframe);
+
+      const doc = iframe.contentWindow.document;
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <title>Laporan Transaksi PUKO - ${periodLabel || 'Semua'}</title>
+            <style>
+              @page {
+                size: A4 portrait;
+                margin: 8mm 10mm;
+              }
+              * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+              }
+              body {
+                font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                font-size: 11px;
+                color: #0f172a;
+                background: #fff;
+                padding: 6mm;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+              table {
+                width: 100%;
+                border-collapse: collapse;
+              }
+              tr, table {
+                page-break-inside: avoid;
+                break-inside: avoid;
+              }
+            </style>
+          </head>
+          <body>
+            ${printEl.innerHTML}
+          </body>
+        </html>
+      `);
+      doc.close();
+
+      setTimeout(() => {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+        setTimeout(() => {
+          if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        }, 2000);
+      }, 200);
+    } catch (e) {
+      console.warn('Iframe print error, falling back to window.print():', e);
+      window.print();
+    }
   };
 
   // Ekspor langsung ke file Excel (.xlsx) dengan rincian lengkap multi-sheet
   const handleExportExcel = () => {
-    if (filteredTransactions.length === 0) {
-      alert('Tidak ada transaksi untuk diekspor pada filter ini.');
-      return;
+    try {
+      if (filteredTransactions.length === 0) {
+        if (transactions.length > 0) {
+          alert(`Tidak ada transaksi pada filter periode "${periodLabel}". Silakan ubah filter periode (misal pilih "Semua Waktu" atau "Bulan Ini") untuk mengekspor data riwayat transaksi.`);
+        } else {
+          alert('Belum ada transaksi tercatat di sistem untuk diekspor ke Excel.');
+        }
+        return;
+      }
+      exportTransactionsToExcel({
+        transactions: filteredTransactions,
+        periodLabel,
+        summary,
+        menuBreakdown,
+        ingredientUsageList,
+        expenses: filteredExpenses,
+        totalPengeluaran,
+        totalPendapatanBersih,
+        storeSettings: settings,
+        printedBy,
+      });
+    } catch (err) {
+      console.error('Error saat ekspor Excel:', err);
+      alert('Terjadi kesalahan saat memproses ekspor Excel: ' + (err?.message || 'Silakan coba lagi.'));
     }
-    exportTransactionsToExcel({
-      transactions: filteredTransactions,
-      periodLabel,
-      summary,
-      menuBreakdown,
-      ingredientUsageList,
-      expenses: filteredExpenses,
-      totalPengeluaran,
-      totalPendapatanBersih,
-      storeSettings: settings,
-      printedBy,
-    });
   };
 
   // Handler ekspor PDF dari tombol utama
   const handleOpenPdfExport = () => {
     if (filteredTransactions.length === 0) {
-      alert('Tidak ada transaksi untuk diekspor pada filter ini.');
+      if (transactions.length > 0) {
+        alert(`Tidak ada transaksi pada filter periode "${periodLabel}". Silakan ubah filter periode (misal pilih "Semua Waktu" atau "Bulan Ini") untuk melihat pratinjau dan ekspor PDF.`);
+      } else {
+        alert('Belum ada transaksi tercatat di sistem untuk diekspor ke PDF.');
+      }
       return;
     }
     setIsReportModalOpen(true);

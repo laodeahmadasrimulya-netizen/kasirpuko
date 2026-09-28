@@ -89,6 +89,7 @@
   body,
   #root,
   .fixed,
+  .relative,
   [class*="fixed"],
   [class*="overflow-"],
   [class*="max-h-"] {

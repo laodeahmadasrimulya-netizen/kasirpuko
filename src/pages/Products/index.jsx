@@ -111,8 +111,8 @@ export const ProductsPage = () => {
           onClick={() => setSelectedCategory('Semua')}
           className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none ${
             selectedCategory === 'Semua'
-              ? 'bg-puko-700 text-white border-puko-700 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200/80 hover:border-puko-300'
+              ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+              : 'bg-white text-slate-700 border-slate-200/80 hover:border-slate-400 hover:bg-slate-50/50'
           }`}
         >
           <span className="text-[11px] font-semibold block opacity-80 uppercase tracking-wider">
@@ -125,8 +125,8 @@ export const ProductsPage = () => {
           onClick={() => setSelectedCategory('Alpukat Kocok')}
           className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none ${
             selectedCategory === 'Alpukat Kocok'
-              ? 'bg-puko-700 text-white border-puko-700 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200/80 hover:border-puko-300'
+              ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+              : 'bg-white text-slate-700 border-slate-200/80 hover:border-slate-400 hover:bg-slate-50/50'
           }`}
         >
           <span className="text-[11px] font-semibold block opacity-80 uppercase tracking-wider">
@@ -139,8 +139,8 @@ export const ProductsPage = () => {
           onClick={() => setSelectedCategory('Topping')}
           className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none ${
             selectedCategory === 'Topping'
-              ? 'bg-puko-700 text-white border-puko-700 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200/80 hover:border-puko-300'
+              ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+              : 'bg-white text-slate-700 border-slate-200/80 hover:border-slate-400 hover:bg-slate-50/50'
           }`}
         >
           <span className="text-[11px] font-semibold block opacity-80 uppercase tracking-wider">
@@ -153,8 +153,8 @@ export const ProductsPage = () => {
           onClick={() => setSelectedCategory('Minuman Tambahan')}
           className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none ${
             selectedCategory === 'Minuman Tambahan'
-              ? 'bg-puko-700 text-white border-puko-700 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-200/80 hover:border-puko-300'
+              ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+              : 'bg-white text-slate-700 border-slate-200/80 hover:border-slate-400 hover:bg-slate-50/50'
           }`}
         >
           <span className="text-[11px] font-semibold block opacity-80 uppercase tracking-wider">
@@ -183,10 +183,10 @@ export const ProductsPage = () => {
                 type="button"
                 onClick={() => setSelectedCategory(cat)}
                 className={`
-                  px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-150 select-none
+                  px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-150 select-none cursor-pointer
                   ${
                     selectedCategory === cat
-                      ? 'bg-puko-600 text-white shadow-sm'
+                      ? 'bg-slate-900 text-white shadow-sm'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }
                 `}

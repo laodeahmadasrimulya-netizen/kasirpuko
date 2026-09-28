@@ -26,80 +26,165 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
 
   if (!transaction) return null;
 
-  // Print action
+  // Print action using dedicated clean iframe (eliminates blank pages & modal clipping)
   const handlePrint = () => {
     playPrintReceiptSound();
-    window.print();
+    const printEl = receiptRef.current;
+    if (!printEl) {
+      window.print();
+      return;
+    }
+
+    try {
+      const oldIframe = document.getElementById('receipt-print-iframe');
+      if (oldIframe) oldIframe.remove();
+
+      const iframe = document.createElement('iframe');
+      iframe.id = 'receipt-print-iframe';
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      iframe.style.visibility = 'hidden';
+      document.body.appendChild(iframe);
+
+      const is58 = paperSize === '58mm';
+      const widthMm = is58 ? '58mm' : '80mm';
+      const doc = iframe.contentWindow.document;
+
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <title>Struk - ${transaction.id}</title>
+            <style>
+              @page {
+                size: ${widthMm} auto;
+                margin: 0;
+              }
+              * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+              }
+              body {
+                width: ${widthMm};
+                margin: 0 auto;
+                padding: ${is58 ? '3mm 2mm' : '4mm 3mm'};
+                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+                font-size: ${is58 ? '10.5px' : '12px'};
+                line-height: 1.35;
+                color: #000;
+                background: #fff;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+              img {
+                max-width: 100%;
+                height: auto;
+                display: block;
+                margin: 0 auto;
+              }
+              .border-dashed {
+                border-top: 1px dashed #444 !important;
+                margin: 6px 0 !important;
+              }
+              .border-dotted {
+                border-top: 1px dotted #666 !important;
+                margin: 4px 0 !important;
+              }
+              .flex {
+                display: flex !important;
+                justify-content: space-between !important;
+              }
+              .text-center { text-align: center !important; }
+              .text-right { text-align: right !important; }
+              .font-bold { font-weight: bold !important; }
+              .font-black { font-weight: 900 !important; }
+              .font-semibold { font-weight: 600 !important; }
+              .font-sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important; }
+              .font-mono { font-family: monospace !important; }
+              .uppercase { text-transform: uppercase !important; }
+              .space-y-0\\.5 > * + * { margin-top: 2px !important; }
+              .space-y-1 > * + * { margin-top: 3px !important; }
+              .space-y-1\\.5 > * + * { margin-top: 4px !important; }
+              .space-y-2 > * + * { margin-top: 5px !important; }
+              .space-y-2\\.5 > * + * { margin-top: 6px !important; }
+              .space-y-3 > * + * { margin-top: 8px !important; }
+              .text-slate-500, .text-slate-600, .text-slate-700 { color: #333 !important; }
+              .text-slate-900, .text-slate-950 { color: #000 !important; }
+              .text-rose-600 { color: #000 !important; }
+              .shadow-md { box-shadow: none !important; }
+              .rounded-2xl { border-radius: 0 !important; }
+              .border { border: none !important; }
+            </style>
+          </head>
+          <body>
+            ${printEl.innerHTML}
+          </body>
+        </html>
+      `);
+      doc.close();
+
+      const images = iframe.contentWindow.document.images;
+      const waitForImages = Array.from(images).map(
+        (img) =>
+          new Promise((resolve) => {
+            if (img.complete) return resolve();
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+          })
+      );
+
+      Promise.all(waitForImages).then(() => {
+        setTimeout(() => {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+          setTimeout(() => {
+            if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+          }, 2000);
+        }, 150);
+      });
+    } catch (e) {
+      console.warn('Iframe print error, falling back to window.print():', e);
+      window.print();
+    }
   };
 
-  // Save as PDF action using direct html2canvas + jsPDF with offscreen full clone
-  // This guarantees 100% full content capture without clipping from modal scroll containers or viewport bounds
+  // Helper to generate canvas from receipt element directly
+  const captureReceiptCanvas = async () => {
+    const el = receiptRef.current;
+    if (!el) return null;
+
+    return await html2canvas(el, {
+      scale: 3, // 3x pixel ratio for sharp text and thermal clarity
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+      onclone: (clonedDoc, clonedEl) => {
+        clonedEl.style.boxShadow = 'none';
+        clonedEl.style.borderRadius = '0';
+        clonedEl.style.border = 'none';
+        clonedEl.style.margin = '0';
+      },
+    });
+  };
+
+  // Save as PDF action
   const handleSavePdf = async () => {
-    const originalEl = receiptRef.current;
-    if (!originalEl) return;
+    if (!receiptRef.current) return;
     playPrintReceiptSound();
     setIsExportingPdf(true);
 
-    let clone = null;
     try {
       const targetWidthMm = paperSize === '58mm' ? 58 : 80;
-      const pixelWidth = paperSize === '58mm' ? 280 : 360;
+      const canvas = await captureReceiptCanvas();
+      if (!canvas) throw new Error('Canvas capture returned null');
 
-      // 1. Create clean off-screen clone attached directly to document.body
-      // This completely detaches it from Modal scroll/max-height constraints!
-      clone = originalEl.cloneNode(true);
-      clone.id = 'receipt-pdf-render-clone';
-
-      // Apply clean styles for exact thermal dimensioning without clipping
-      clone.style.position = 'fixed';
-      clone.style.left = '-9999px';
-      clone.style.top = '0';
-      clone.style.width = `${pixelWidth}px`;
-      clone.style.height = 'auto';
-      clone.style.maxHeight = 'none';
-      clone.style.overflow = 'visible';
-      clone.style.boxShadow = 'none';
-      clone.style.border = 'none';
-      clone.style.borderRadius = '0';
-      clone.style.margin = '0';
-      clone.style.backgroundColor = '#ffffff';
-      clone.style.zIndex = '-9999';
-
-      document.body.appendChild(clone);
-
-      // 2. Ensure all images inside clone (e.g. /logo.png) are fully loaded
-      const images = clone.querySelectorAll('img');
-      await Promise.all(
-        Array.from(images).map(
-          (img) =>
-            new Promise((resolve) => {
-              if (img.complete) return resolve();
-              img.onload = () => resolve();
-              img.onerror = () => resolve();
-            })
-        )
-      );
-
-      // Brief pause to ensure fonts and layout geometry are rendered
-      await new Promise((resolve) => setTimeout(resolve, 80));
-
-      const fullHeight = clone.scrollHeight || clone.offsetHeight;
-
-      // 3. Render the full clone with html2canvas
-      const canvas = await html2canvas(clone, {
-        scale: 3, // High DPI for crystal-sharp text & logo
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        width: pixelWidth,
-        height: fullHeight,
-        windowWidth: 1200,
-        windowHeight: fullHeight + 500,
-        scrollX: 0,
-        scrollY: 0,
-      });
-
-      // 4. Calculate exact proportional height in mm (single continuous thermal roll)
       const targetHeightMm = Math.round((canvas.height / canvas.width) * targetWidthMm);
 
       const pdf = new jsPDF({
@@ -113,11 +198,36 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
       pdf.save(`Struk-${transaction.id}.pdf`);
     } catch (err) {
       console.error('Failed to generate receipt PDF:', err);
-      window.print();
+      // Fallback: download as JPG image
+      handleSaveImage();
     } finally {
-      if (clone && clone.parentNode) {
-        clone.parentNode.removeChild(clone);
-      }
+      setIsExportingPdf(false);
+    }
+  };
+
+  // Save as Image (JPG) action for easy customer sharing via WhatsApp
+  const handleSaveImage = async () => {
+    if (!receiptRef.current) return;
+    playPrintReceiptSound();
+    setIsExportingPdf(true);
+
+    try {
+      const canvas = await captureReceiptCanvas();
+      if (!canvas) throw new Error('Canvas capture returned null');
+
+      const link = document.createElement('a');
+      link.download = `Struk-${transaction.id}.jpg`;
+      link.href = canvas.toDataURL('image/jpeg', 0.95);
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        if (link.parentNode) link.parentNode.removeChild(link);
+      }, 1000);
+    } catch (err) {
+      console.error('Failed to save receipt image:', err);
+      alert('Gagal mengunduh struk. Mengalihkan ke opsi cetak struk...');
+      handlePrint();
+    } finally {
       setIsExportingPdf(false);
     }
   };
@@ -342,25 +452,39 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
           </div>
         </div>
 
-        {/* Action Buttons: Cetak & Simpan PDF */}
-        <div className="w-full grid grid-cols-2 gap-2.5 mt-5">
-          <Button
-            variant="outline"
-            size="md"
-            onClick={handleSavePdf}
-            disabled={isExportingPdf}
-            icon={Download}
-            className="font-bold border-slate-300"
-          >
-            {isExportingPdf ? 'Menyimpan...' : 'Simpan PDF'}
-          </Button>
+        {/* Action Buttons: Cetak, Simpan PDF & Simpan Gambar */}
+        <div className="w-full space-y-2 mt-5">
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={handleSavePdf}
+              disabled={isExportingPdf}
+              icon={Download}
+              className="font-bold border-slate-300 text-xs sm:text-sm"
+            >
+              {isExportingPdf ? 'Mengunduh...' : 'Simpan PDF'}
+            </Button>
+
+            <Button
+              variant="outline"
+              size="md"
+              onClick={handleSaveImage}
+              disabled={isExportingPdf}
+              icon={Download}
+              className="font-bold border-slate-300 text-xs sm:text-sm"
+            >
+              Simpan Gambar (JPG)
+            </Button>
+          </div>
 
           <Button
             variant="primary"
             size="md"
+            fullWidth
             onClick={handlePrint}
             icon={Printer}
-            className="font-bold bg-puko-600 hover:bg-puko-700 shadow-md shadow-puko-700/20"
+            className="font-bold bg-puko-600 hover:bg-puko-700 shadow-md shadow-puko-700/20 py-2.5"
           >
             Cetak Struk
           </Button>
