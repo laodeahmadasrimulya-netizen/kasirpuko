@@ -16,6 +16,7 @@ import { useAuth } from '../../context/AuthContext';
 import { playPrintReceiptSound } from '../../utils/sound';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import { downloadOrShareFile } from '../../utils/fileDownloader';
 
 export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
   const { settings } = useSettings();
@@ -195,7 +196,18 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
 
       const imgData = canvas.toDataURL('image/jpeg', 0.98);
       pdf.addImage(imgData, 'JPEG', 0, 0, targetWidthMm, targetHeightMm, undefined, 'FAST');
-      pdf.save(`Struk-${transaction.id}.pdf`);
+      const filename = `Struk-${transaction.id}.pdf`;
+
+      const pdfBlob = pdf.output('blob');
+      const pdfBase64 = pdf.output('datauristring').split(',')[1];
+
+      await downloadOrShareFile({
+        filename,
+        blob: pdfBlob,
+        base64Data: pdfBase64,
+        mimeType: 'application/pdf',
+        title: `Struk Pembayaran ${transaction.id}`,
+      });
     } catch (err) {
       console.error('Failed to generate receipt PDF:', err);
       // Fallback: download as JPG image
@@ -215,14 +227,18 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
       const canvas = await captureReceiptCanvas();
       if (!canvas) throw new Error('Canvas capture returned null');
 
-      const link = document.createElement('a');
-      link.download = `Struk-${transaction.id}.jpg`;
-      link.href = canvas.toDataURL('image/jpeg', 0.95);
-      document.body.appendChild(link);
-      link.click();
-      setTimeout(() => {
-        if (link.parentNode) link.parentNode.removeChild(link);
-      }, 1000);
+      const filename = `Struk-${transaction.id}.jpg`;
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      const base64Data = dataUrl.split(',')[1];
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.95));
+
+      await downloadOrShareFile({
+        filename,
+        blob,
+        base64Data,
+        mimeType: 'image/jpeg',
+        title: `Struk Pembayaran ${transaction.id}`,
+      });
     } catch (err) {
       console.error('Failed to save receipt image:', err);
       alert('Gagal mengunduh struk. Mengalihkan ke opsi cetak struk...');

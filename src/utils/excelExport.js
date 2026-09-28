@@ -1,6 +1,7 @@
 import XLSX from 'xlsx-js-style';
 import { formatDate } from './date';
 import { countCups } from './productUtils';
+import { downloadOrShareFile } from './fileDownloader';
 
 // =========================================================================
 // DEFINISI PALET WARNA & STYLE EXCEL RESMI PUKO
@@ -186,7 +187,7 @@ const styleRow = (ws, r, startCol, endCol, styleOrFn) => {
  * - Pendapatan Bersih: Berwarna Hijau PUKO
  * - Pengeluaran Toko: Berwarna Merah
  */
-export const exportTransactionsToExcel = (
+export const exportTransactionsToExcel = async (
   transactionsOrOptions,
   periodLabelParam = '',
   summaryParam = null,
@@ -976,22 +977,21 @@ export const exportTransactionsToExcel = (
   // Format Nama File Resmi
   const filename = `Laporan-Lengkap-PUKO-${cleanPeriod}-${dateStr}.xlsx`;
 
-  // Download langsung ke perangkat pengguna dengan style aktif
+  // Download atau bagikan langsung di HP (Capacitor/WhatsApp) maupun Desktop
   try {
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const base64Data = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
     const blob = new Blob([wbout], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
     });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => {
-      if (link.parentNode) link.parentNode.removeChild(link);
-      URL.revokeObjectURL(url);
-    }, 1500);
+
+    await downloadOrShareFile({
+      filename,
+      blob,
+      base64Data,
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      title: `Laporan Keuangan PUKO (${periodLabel || 'Semua Waktu'})`,
+    });
   } catch (err) {
     console.warn('Fallback to XLSX.writeFile:', err);
     XLSX.writeFile(wb, filename);

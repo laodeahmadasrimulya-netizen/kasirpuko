@@ -27,6 +27,7 @@ import {
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { exportTransactionsToExcel } from '../../utils/excelExport';
+import { downloadOrShareFile } from '../../utils/fileDownloader';
 import { useTransactions } from '../../context/TransactionContext';
 import { useSettings } from '../../context/SettingsContext';
 import { useExpenses } from '../../context/ExpenseContext';
@@ -472,7 +473,16 @@ export const TransactionsPage = () => {
       const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
       const filename = `Laporan_Transaksi_PUKO_${safeLabel}_${dateStr}.pdf`;
 
-      pdf.save(filename);
+      const pdfBlob = pdf.output('blob');
+      const pdfBase64 = pdf.output('datauristring').split(',')[1];
+
+      await downloadOrShareFile({
+        filename,
+        blob: pdfBlob,
+        base64Data: pdfBase64,
+        mimeType: 'application/pdf',
+        title: `Laporan Transaksi PUKO (${periodLabel || 'Semua'})`,
+      });
     } catch (err) {
       console.error('Failed to export PDF:', err);
       alert('Terjadi kesalahan saat generate PDF. Mengalihkan ke dialog cetak dokumen...');
@@ -564,7 +574,7 @@ export const TransactionsPage = () => {
   };
 
   // Ekspor langsung ke file Excel (.xlsx) dengan rincian lengkap multi-sheet
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     try {
       if (filteredTransactions.length === 0) {
         if (transactions.length > 0) {
@@ -574,7 +584,7 @@ export const TransactionsPage = () => {
         }
         return;
       }
-      exportTransactionsToExcel({
+      await exportTransactionsToExcel({
         transactions: filteredTransactions,
         periodLabel,
         summary,
