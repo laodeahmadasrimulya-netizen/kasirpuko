@@ -22,6 +22,7 @@ import {
   LogOut,
   Phone,
   Mail,
+  MessageSquare,
 } from 'lucide-react';
 import { ProductsPage } from '../Products';
 import { useSettings } from '../../context/SettingsContext';
@@ -36,6 +37,11 @@ import {
   playPrintReceiptSound,
   setSoundEnabled,
 } from '../../utils/sound';
+import {
+  getFonnteToken,
+  setFonnteToken,
+  sendTestWhatsApp,
+} from '../../services/whatsappService';
 
 export const SettingsPage = () => {
   const { settings, updateSettings } = useSettings();
@@ -93,6 +99,42 @@ export const SettingsPage = () => {
   const [userSuccessMessage, setUserSuccessMessage] = useState('');
   const [userToDelete, setUserToDelete] = useState(null);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
+
+  // WhatsApp Gateway states
+  const [fonnteToken, setFonnteTokenState] = useState(() => getFonnteToken());
+  const [showFonnteToken, setShowFonnteToken] = useState(false);
+  const [fonnteSaveSuccess, setFonnteSaveSuccess] = useState(false);
+  const [isTestingWa, setIsTestingWa] = useState(false);
+  const [waTestResult, setWaTestResult] = useState(null);
+
+  const handleSaveFonnteToken = () => {
+    setFonnteToken(fonnteToken);
+    setFonnteSaveSuccess(true);
+    playSuccessSound();
+    setTimeout(() => setFonnteSaveSuccess(false), 3000);
+  };
+
+  const handleTestWhatsApp = async () => {
+    if (!fonnteToken.trim()) {
+      setWaTestResult({
+        success: false,
+        message: 'Masukkan Token Fonnte terlebih dahulu sebelum melakukan tes kirim.',
+      });
+      return;
+    }
+    const testPhone = form.phone || currentUser?.phone || '085652103647';
+    setIsTestingWa(true);
+    setWaTestResult(null);
+    try {
+      const res = await sendTestWhatsApp(testPhone);
+      setWaTestResult(res);
+      if (res.success) playSuccessSound();
+    } catch (err) {
+      setWaTestResult({ success: false, message: err.message });
+    } finally {
+      setIsTestingWa(false);
+    }
+  };
 
   useEffect(() => {
     if (settings) {
@@ -637,6 +679,118 @@ export const SettingsPage = () => {
                 * Suara dinonaktifkan. Semua aksi kasir dan transaksi akan berjalan senyap tanpa bunyi nada.
               </p>
             )}
+          </div>
+        </Card>
+
+        {/* WhatsApp Gateway & OTP Card */}
+        <Card className="space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
+                <MessageSquare className="w-4 h-4 text-emerald-700" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-800 text-sm">
+                  WhatsApp Gateway (Fonnte) & OTP
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Kirim kode OTP lupa password otomatis langsung ke chat WhatsApp pengguna/kasir.
+                </p>
+              </div>
+            </div>
+
+            <span
+              className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border ${
+                fonnteToken
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-amber-50 text-amber-700 border-amber-200'
+              }`}
+            >
+              {fonnteToken ? '● Gateway Aktif' : '○ Belum Dikonfigurasi'}
+            </span>
+          </div>
+
+          {fonnteSaveSuccess && (
+            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="font-bold">Token WhatsApp Gateway berhasil disimpan!</span>
+            </div>
+          )}
+
+          {waTestResult && (
+            <div
+              className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
+                waTestResult.success
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : 'bg-rose-50 border-rose-200 text-rose-700'
+              }`}
+            >
+              {waTestResult.success ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              )}
+              <span className="leading-relaxed font-semibold">{waTestResult.message}</span>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                  Fonnte API Token
+                </label>
+                <a
+                  href="https://fonnte.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-emerald-700 hover:text-emerald-800 font-bold hover:underline"
+                >
+                  Dapatkan Token di Fonnte.com ↗
+                </a>
+              </div>
+
+              <div className="relative">
+                <input
+                  type={showFonnteToken ? 'text' : 'password'}
+                  value={fonnteToken}
+                  onChange={(e) => setFonnteTokenState(e.target.value)}
+                  placeholder="Contoh: token_fonnte_anda_123456"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-xs rounded-xl pl-3 pr-10 py-2.5 focus:outline-none focus:ring-2 focus:ring-puko-500 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowFonnteToken(!showFonnteToken)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-700 cursor-pointer"
+                >
+                  {showFonnteToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+
+              <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                Cara setting: Buat akun di <b>fonnte.com</b>, scan QR WhatsApp Anda, lalu salin Token dari dashboard Fonnte ke kotak di atas.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                type="button"
+                variant="primary"
+                onClick={handleSaveFonnteToken}
+                className="text-xs py-2 px-4 cursor-pointer"
+              >
+                Simpan Token
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleTestWhatsApp}
+                disabled={isTestingWa}
+                className="text-xs py-2 px-4 cursor-pointer"
+              >
+                {isTestingWa ? 'Mengirim Pesan Tes...' : 'Tes Kirim Pesan ke WhatsApp'}
+              </Button>
+            </div>
           </div>
         </Card>
 

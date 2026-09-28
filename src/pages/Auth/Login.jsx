@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { playSuccessSound } from '../../utils/sound';
+import { sendOtpWhatsApp } from '../../services/whatsappService';
 
 export const LoginPage = () => {
   const {
@@ -235,30 +236,32 @@ export const LoginPage = () => {
       setVerifiedUser(target);
       setOtpDigits(['', '', '', '', '', '']);
 
-      // Optional: Send automated WhatsApp message via Fonnte Gateway if token is set
-      const fonnteToken = import.meta.env?.VITE_FONNTE_TOKEN;
-      if (fonnteToken) {
-        try {
-          fetch('https://api.fonnte.com/send', {
-            method: 'POST',
-            headers: {
-              Authorization: fonnteToken,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              target: cleanPhone,
-              message: `[PUKO POS] Kode OTP pemulihan kata sandi akun *${target.name}* adalah: *${code}*.\n\nKode berlaku selama 5 menit. JANGAN berikan kode ini kepada siapa pun demi keamanan akun kasir Anda.`,
-            }),
-          }).catch((err) => console.warn('Fonnte send error:', err));
-        } catch (err) {
-          console.warn('Fonnte send error:', err);
+      // Kirim pesan WhatsApp asli melalui Fonnte Gateway
+      const result = await sendOtpWhatsApp({
+        phone: cleanPhone,
+        otp: code,
+        name: target.name,
+      });
+
+      if (!result.success) {
+        if (result.noToken) {
+          setRecoveryError(
+            'Layanan WhatsApp Gateway belum dikonfigurasi. Silakan atur Token Fonnte di Pengaturan > Toko & Sistem > WhatsApp Gateway, atau hubungi Owner.'
+          );
+        } else {
+          setRecoveryError(
+            result.message ||
+              'Gagal mengirim pesan WhatsApp. Pastikan perangkat WhatsApp terhubung dan nomor HP aktif.'
+          );
         }
+        setIsSendingOtp(false);
+        return;
       }
 
       playSuccessSound();
       setForgotStep('OTP');
     } catch (err) {
-      setRecoveryError(err.message || 'Gagal mengirim kode OTP. Coba lagi.');
+      setRecoveryError(err.message || 'Gagal mengirim kode OTP ke WhatsApp. Coba lagi.');
     } finally {
       setIsSendingOtp(false);
     }
@@ -871,60 +874,25 @@ export const LoginPage = () => {
             {/* ========================================================== */}
             {forgotStep === 'OTP' && (
               <form onSubmit={handleVerifyOtp} className="space-y-4">
-                {/* Official Notification Preview & Copy Helper */}
-                <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-2xl p-3 sm:p-3.5 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-xs font-extrabold text-emerald-950 flex items-center gap-1">
-                        <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
-                        Notifikasi Kode OTP WhatsApp
-                      </span>
-                    </div>
-                    <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100/90 px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      Berlaku 5 Menit
-                    </span>
+                {/* WhatsApp Sent Status Card (Kode dikirim ke WhatsApp, disembunyikan dari layar) */}
+                <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-2xl p-4 text-center space-y-2.5">
+                  <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/20">
+                    <MessageSquare className="w-6 h-6" />
                   </div>
-
-                  <p className="text-xs text-emerald-900 font-medium leading-relaxed">
-                    Kode pemulihan akun <b>{verifiedUser?.name}</b> ({verifiedUser?.role}):
-                  </p>
-
-                  <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-emerald-300 shadow-xs">
-                    <div className="flex items-center gap-2">
-                      <KeyRound className="w-4 h-4 text-emerald-600" />
-                      <span className="text-lg font-black tracking-widest font-mono text-emerald-950 select-all">
-                        {generatedOtp}
-                      </span>
+                  <div>
+                    <h4 className="font-extrabold text-emerald-950 text-sm">
+                      Kode OTP Terkirim ke WhatsApp
+                    </h4>
+                    <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
+                      Kami telah mengirimkan 6-digit kode verifikasi ke nomor WhatsApp akun <b>{verifiedUser?.name}</b>:
+                    </p>
+                    <div className="inline-block mt-1.5 px-3 py-1 bg-white rounded-full border border-emerald-300 shadow-xs font-mono font-black text-emerald-950 text-xs">
+                      {recoveryPhone}
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={copyOtpToClipboard}
-                        className="px-2.5 py-1 text-xs font-bold rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Salin kode ke clipboard"
-                      >
-                        {otpCopied ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-600" />
-                            <span>Tersalin</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3" />
-                            <span>Salin</span>
-                          </>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={fillOtpAutomatically}
-                        className="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer shadow-xs"
-                      >
-                        Isi Otomatis
-                      </button>
-                    </div>
+                  </div>
+                  <div className="pt-1 border-t border-emerald-200/60 flex items-center justify-center gap-1.5 text-[11px] text-emerald-900 font-medium">
+                    <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Kode berlaku selama <b>5 menit</b>. Silakan periksa chat WhatsApp Anda.</span>
                   </div>
                 </div>
 
