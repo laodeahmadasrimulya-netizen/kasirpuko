@@ -92,7 +92,7 @@ export const TransactionsPage = () => {
     return INDO_MONTHS_FULL[now.getMonth()];
   }, [customStartDate]);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
-  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [reportFormat, setReportFormat] = useState('a4'); // Standar A4 universal
 
   const reportRef = useRef(null);
@@ -427,10 +427,22 @@ export const TransactionsPage = () => {
     return name.toLowerCase().includes('kasir') ? name : `Kasir (${name})`;
   }, [isAdmin, user, settings]);
 
-  // Download PDF using direct html2canvas + jsPDF with full multi-page A4 document layout
+  // Download PDF langsung menggunakan html2canvas + jsPDF dengan tata letak dokumen A4
   const handleSavePdf = async () => {
+    if (filteredTransactions.length === 0) {
+      if (transactions.length > 0) {
+        alert(`Tidak ada transaksi pada filter periode "${periodLabel}". Silakan ubah filter periode (misal pilih "Semua Waktu" atau "Bulan Ini") untuk mengunduh dokumen PDF.`);
+      } else {
+        alert('Belum ada transaksi tercatat di sistem untuk diunduh ke PDF.');
+      }
+      return;
+    }
+
     const element = reportRef.current;
-    if (!element) return;
+    if (!element) {
+      alert('Komponen dokumen laporan sedang disiapkan. Silakan coba sesaat lagi.');
+      return;
+    }
     setIsExportingPdf(true);
 
     try {
@@ -599,6 +611,7 @@ export const TransactionsPage = () => {
         }
         return;
       }
+      setIsExportingExcel(true);
       await exportTransactionsToExcel({
         transactions: filteredTransactions,
         periodLabel,
@@ -614,20 +627,9 @@ export const TransactionsPage = () => {
     } catch (err) {
       console.error('Error saat ekspor Excel:', err);
       alert('Terjadi kesalahan saat memproses ekspor Excel: ' + (err?.message || 'Silakan coba lagi.'));
+    } finally {
+      setIsExportingExcel(false);
     }
-  };
-
-  // Handler ekspor PDF dari tombol utama
-  const handleOpenPdfExport = () => {
-    if (filteredTransactions.length === 0) {
-      if (transactions.length > 0) {
-        alert(`Tidak ada transaksi pada filter periode "${periodLabel}". Silakan ubah filter periode (misal pilih "Semua Waktu" atau "Bulan Ini") untuk melihat pratinjau dan ekspor PDF.`);
-      } else {
-        alert('Belum ada transaksi tercatat di sistem untuk diekspor ke PDF.');
-      }
-      return;
-    }
-    setIsReportModalOpen(true);
   };
 
   const handleClearHistory = async () => {
@@ -681,20 +683,22 @@ export const TransactionsPage = () => {
           <Button
             variant="primary"
             size="sm"
-            onClick={handleOpenPdfExport}
-            icon={FileText}
+            onClick={handleSavePdf}
+            disabled={isExportingPdf || isExportingExcel}
+            icon={isExportingPdf ? Loader2 : Download}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm"
           >
-            Ekspor PDF
+            {isExportingPdf ? 'Mengunduh PDF...' : 'Download PDF'}
           </Button>
 
           <Button
             size="sm"
             onClick={handleExportExcel}
-            icon={FileSpreadsheet}
+            disabled={isExportingPdf || isExportingExcel}
+            icon={isExportingExcel ? Loader2 : FileSpreadsheet}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm"
           >
-            Ekspor Excel
+            {isExportingExcel ? 'Mengunduh Excel...' : 'Download Excel'}
           </Button>
 
           {isAdmin && (transactions.length > 0 || expenses.length > 0) && (
@@ -995,64 +999,25 @@ export const TransactionsPage = () => {
       </Card>
 
       {/* ========================================================================= */}
-      {/* MODAL PRATINJAU & EXPORT PDF LAPORAN TRANSAKSI */}
+      {/* TEMPLATE DOKUMEN CETAK / EXPORT PDF LAPORAN (OFF-SCREEN UNTUK DIRECT DOWNLOAD) */}
       {/* ========================================================================= */}
-      <Modal
-        isOpen={isReportModalOpen}
-        onClose={() => setIsReportModalOpen(false)}
-        title="Pratinjau & Cetak Laporan Penjualan"
-        maxWidth="max-w-4xl"
+      <div
+        style={{
+          position: 'fixed',
+          left: '-9999px',
+          top: 0,
+          width: '750px',
+          zIndex: -9999,
+          pointerEvents: 'none',
+        }}
+        aria-hidden="true"
       >
-        <div className="space-y-4">
-          {/* Action Header Bar */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 bg-slate-100 rounded-2xl">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <FileText className="w-4 h-4 text-puko-600" /> Dokumen Laporan Penjualan (A4)
-              </span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleSavePdf}
-                disabled={isExportingPdf}
-                icon={isExportingPdf ? Loader2 : Download}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex-1 sm:flex-none shadow-sm"
-              >
-                {isExportingPdf ? 'Sedang Mengunduh...' : 'Download PDF (A4)'}
-              </Button>
-
-              <Button
-                size="sm"
-                onClick={handleExportExcel}
-                icon={FileSpreadsheet}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm flex-1 sm:flex-none"
-              >
-                Ekspor Excel
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handlePrintClick}
-                icon={Printer}
-                className="flex-1 sm:flex-none"
-              >
-                Cetak Printer
-              </Button>
-            </div>
-          </div>
-
-          {/* Printable Sheet View */}
-          <div className="overflow-x-auto bg-slate-200/60 p-2 sm:p-6 rounded-2xl flex justify-center">
-            <div
-              id="printable-report"
-              ref={reportRef}
-              style={{
-                width: '100%',
-                maxWidth: '750px',
+        <div
+          id="printable-report"
+          ref={reportRef}
+          style={{
+            width: '750px',
+            maxWidth: '750px',
                 backgroundColor: '#ffffff',
                 color: '#0f172a',
                 padding: '28px 32px',
@@ -2176,8 +2141,6 @@ export const TransactionsPage = () => {
               </div>
             </div>
           </div>
-        </div>
-      </Modal>
 
       {/* MODAL KALENDER & PEMILIH BULAN (SESUAI GAMBAR 1 & 2) */}
       <CalendarFilterModal

@@ -6,11 +6,24 @@ import { useAuth } from '../../hooks/useAuth';
 
 export const Topbar = () => {
   const { settings } = useSettings();
-  const { user, logout, quickLogin } = useAuth();
+  const { user, users, allUsers, logout, quickLogin, quickLoginToUser } = useAuth();
   const navigate = useNavigate();
   const [time, setTime] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef(null);
+
+  // List akun kasir toko aktif untuk pilihan beralih akun kasir
+  const cashiers = (users && users.length > 0 ? users : allUsers || []).filter(
+    (u) => u.role === 'KASIR'
+  );
+
+  const getCashierLabel = (c) => {
+    const name = c?.name || c?.username || 'Kasir';
+    if (name.toLowerCase().startsWith('kasir')) {
+      return `Beralih ke ${name}`;
+    }
+    return `Beralih ke Kasir ${name}`;
+  };
 
   // Close dropdown menu when clicking outside
   useEffect(() => {
@@ -99,7 +112,7 @@ export const Topbar = () => {
 
           {/* Dropdown Menu (Logout & Switch Account) */}
           {isMenuOpen && (
-            <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl border border-slate-200 py-1.5 z-50 animate-fadeIn divide-y divide-slate-100 shadow-md">
+            <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl border border-slate-200 py-1.5 z-50 animate-fadeIn divide-y divide-slate-100 shadow-md">
               {/* Profile Header */}
               <div className="px-3.5 py-2.5 flex items-center gap-2.5">
                 <div className="w-7 h-7 rounded-full bg-[#DFE5E7] flex items-center justify-center text-slate-600 border border-slate-300 shrink-0">
@@ -115,21 +128,46 @@ export const Topbar = () => {
                 </div>
               </div>
 
-              {/* Actions: Admin can switch to Kasir or Logout; Kasir can ONLY Logout */}
+              {/* Actions: Admin can switch to Kasir accounts or Logout; Kasir can ONLY Logout */}
               <div className="p-1 space-y-0.5">
                 {user?.role === 'ADMIN' && !user?.isDemo && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      quickLogin('KASIR');
-                      setIsMenuOpen(false);
-                      navigate('/kasir');
-                    }}
-                    className="w-full px-3 py-2 text-left rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 flex items-center gap-2.5 transition-colors cursor-pointer text-xs font-bold"
-                  >
-                    <ArrowRightLeft className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Beralih ke Akun Kasir</span>
-                  </button>
+                  <>
+                    {cashiers.length > 0 ? (
+                      cashiers.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            if (quickLoginToUser) {
+                              quickLoginToUser(c);
+                            } else {
+                              quickLogin('KASIR');
+                            }
+                            setIsMenuOpen(false);
+                            navigate('/kasir');
+                          }}
+                          className="w-full px-3 py-2 text-left rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 flex items-center gap-2.5 transition-colors cursor-pointer text-xs font-bold"
+                          title={`Beralih ke akun ${c.name || c.username}`}
+                        >
+                          <ArrowRightLeft className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span className="truncate">{getCashierLabel(c)}</span>
+                        </button>
+                      ))
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          quickLogin('KASIR');
+                          setIsMenuOpen(false);
+                          navigate('/kasir');
+                        }}
+                        className="w-full px-3 py-2 text-left rounded-xl hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 flex items-center gap-2.5 transition-colors cursor-pointer text-xs font-bold"
+                      >
+                        <ArrowRightLeft className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>Beralih ke Akun Kasir</span>
+                      </button>
+                    )}
+                  </>
                 )}
 
                 <button

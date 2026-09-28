@@ -1181,6 +1181,29 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
+   * One-click Quick Login to a specific cashier / user account
+   */
+  const quickLoginToUser = (targetUserOrId) => {
+    let target = null;
+    if (typeof targetUserOrId === 'object' && targetUserOrId !== null) {
+      target = targetUserOrId;
+    } else {
+      target =
+        visibleUsers.find((u) => u.id === targetUserOrId || u.username === targetUserOrId) ||
+        users.find((u) => u.id === targetUserOrId || u.username === targetUserOrId);
+    }
+
+    if (target) {
+      const targetStoreId = target.storeId || target.store_id || DEFAULT_STORE_ID;
+      storeService.setActiveStoreId(targetStoreId);
+      const userWithStore = { ...target, storeId: targetStoreId, store_id: targetStoreId };
+      setUser(userWithStore);
+      return userWithStore;
+    }
+    return null;
+  };
+
+  /**
    * Add a new cashier account for the CURRENT store
    */
   const addUser = ({ name, username, pin, phone = '', email = '' }) => {
@@ -1487,6 +1510,7 @@ export const AuthProvider = ({ children }) => {
     verifyPasswordResetOtp,
     updatePasswordAfterReset,
     quickLogin,
+    quickLoginToUser,
     findUserByPhone,
     resetPasswordWithPhone,
     normalizePhone,
