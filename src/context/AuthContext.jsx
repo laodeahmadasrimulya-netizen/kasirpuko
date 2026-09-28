@@ -947,6 +947,19 @@ export const AuthProvider = ({ children }) => {
       setUser((prev) => ({ ...prev, pin: cleanPin }));
     }
 
+    // Sync to Supabase users table so changes persist across devices
+    try {
+      supabase
+        .from('users')
+        .update({ pin: cleanPin })
+        .eq('id', target.id)
+        .then(({ error }) => {
+          if (error) console.warn('[AuthContext] resetPasswordWithPhone Supabase update error:', error);
+        });
+    } catch (err) {
+      console.warn('[AuthContext] resetPasswordWithPhone error:', err);
+    }
+
     return {
       success: true,
       user: updatedUser || target,
