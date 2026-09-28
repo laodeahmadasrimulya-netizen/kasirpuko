@@ -726,6 +726,34 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
+   * Login with Google OAuth
+   * 1-Click login for Owner using Google account
+   */
+  const loginWithGoogle = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account',
+          },
+        },
+      });
+
+      if (error) throw error;
+      return { success: true, data };
+    } catch (err) {
+      console.error('Google OAuth signIn error:', err);
+      return {
+        success: false,
+        message: err.message || 'Gagal masuk menggunakan Google. Pastikan akun Google Anda aktif.',
+      };
+    }
+  };
+
+  /**
    * Verify 6-digit OTP confirmation code from Gmail
    * Automatically initializes the Owner's dedicated store
    */
@@ -1295,6 +1323,7 @@ export const AuthProvider = ({ children }) => {
     exitDemoMode,
     ownerEmail: OWNER_EMAIL,
     login,
+    loginWithGoogle,
     signUpWithEmail,
     verifyEmailOtp,
     resendOtp,
