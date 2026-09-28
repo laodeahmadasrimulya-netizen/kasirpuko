@@ -731,10 +731,27 @@ export const AuthProvider = ({ children }) => {
    */
   const loginWithGoogle = async () => {
     try {
+      // Pastikan redirect URL valid (bukan 'null' atau 'localhost' saat diakses di HP/APK)
+      let redirectUrl = window.location.origin;
+      const isMobile =
+        typeof navigator !== 'undefined' &&
+        /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+
+      if (
+        isMobile ||
+        !redirectUrl ||
+        redirectUrl === 'null' ||
+        redirectUrl.includes('localhost') ||
+        redirectUrl.startsWith('capacitor://') ||
+        redirectUrl.startsWith('file://')
+      ) {
+        redirectUrl = 'https://kasirpuko.vercel.app';
+      }
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin,
+          redirectTo: redirectUrl,
           queryParams: {
             access_type: 'offline',
             prompt: 'select_account',
