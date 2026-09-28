@@ -28,7 +28,12 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { Capacitor } from '@capacitor/core';
 import { exportTransactionsToExcel } from '../../utils/excelExport';
-import { downloadOrShareFile } from '../../utils/fileDownloader';
+import {
+  downloadOrShareFile,
+  isMobileDevice,
+  saveFileToDeviceStorage,
+} from '../../utils/fileDownloader';
+import { FileActionModal } from '../../components/common/FileActionModal';
 import { useTransactions } from '../../context/TransactionContext';
 import { useSettings } from '../../context/SettingsContext';
 import { useExpenses } from '../../context/ExpenseContext';
@@ -94,6 +99,7 @@ export const TransactionsPage = () => {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [reportFormat, setReportFormat] = useState('a4'); // Standar A4 universal
+  const [downloadModalData, setDownloadModalData] = useState(null);
 
   const reportRef = useRef(null);
 
@@ -447,14 +453,19 @@ export const TransactionsPage = () => {
 
     try {
       // Pastikan render DOM stabil
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 250));
 
       const canvas = await html2canvas(element, {
         scale: 1.5, // 1.5x scale saves RAM on mobile while remaining sharp on A4 PDF
         useCORS: true,
-        allowTaint: false,
+        allowTaint: true,
         logging: false,
         backgroundColor: '#ffffff',
+        windowWidth: 1024,
+        scrollX: 0,
+        scrollY: 0,
+        x: 0,
+        y: 0,
       });
 
       const pdf = new jsPDF('p', 'mm', 'a4');
@@ -489,14 +500,30 @@ export const TransactionsPage = () => {
 
       const pdfBlob = pdf.output('blob');
       const pdfBase64 = pdf.output('datauristring').split(',')[1];
+      const sizeKb = Math.round(pdfBlob.size / 1024);
+      const sizeLabel = sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`;
 
-      await downloadOrShareFile({
+      const filePayload = {
         filename,
         blob: pdfBlob,
         base64Data: pdfBase64,
         mimeType: 'application/pdf',
         title: `Laporan Transaksi PUKO (${periodLabel || 'Semua'})`,
-      });
+        sizeLabel,
+      };
+
+      // Di HP / Android: simpan ke memori dan tampilkan modal aksi (Simpan ke HP & Buka / Bagikan)
+      if (isMobileDevice()) {
+        try {
+          await saveFileToDeviceStorage(filePayload);
+        } catch (saveErr) {
+          console.warn('Auto save error on mobile:', saveErr);
+        }
+        setDownloadModalData(filePayload);
+      } else {
+        // Di PC/Laptop: unduh langsung otomatis ke folder Downloads
+        await downloadOrShareFile(filePayload);
+      }
     } catch (err) {
       console.error('Failed to export PDF:', err);
       alert('Gagal membuat dokumen PDF: ' + (err?.message || 'Silakan coba lagi.'));
@@ -612,7 +639,7 @@ export const TransactionsPage = () => {
         return;
       }
       setIsExportingExcel(true);
-      await exportTransactionsToExcel({
+      const result = await exportTransactionsToExcel({
         transactions: filteredTransactions,
         periodLabel,
         summary,
@@ -624,6 +651,10 @@ export const TransactionsPage = () => {
         storeSettings: settings,
         printedBy,
       });
+
+      if (isMobileDevice() && result) {
+        setDownloadModalData(result);
+      }
     } catch (err) {
       console.error('Error saat ekspor Excel:', err);
       alert('Terjadi kesalahan saat memproses ekspor Excel: ' + (err?.message || 'Silakan coba lagi.'));
@@ -1003,12 +1034,13 @@ export const TransactionsPage = () => {
       {/* ========================================================================= */}
       <div
         style={{
-          position: 'fixed',
-          left: '-9999px',
+          position: 'absolute',
+          left: 0,
           top: 0,
           width: '750px',
-          zIndex: -9999,
+          opacity: 0,
           pointerEvents: 'none',
+          zIndex: -9999,
         }}
         aria-hidden="true"
       >
@@ -2155,6 +2187,13 @@ export const TransactionsPage = () => {
           setMonthFilterLabel(label);
           setDateFilter('MONTH');
         }}
+      />
+
+      {/* MODAL AKSI FILE (SIMPAN KE HP & BUKA / BAGIKAN) */}
+      <FileActionModal
+        isOpen={Boolean(downloadModalData)}
+        onClose={() => setDownloadModalData(null)}
+        fileData={downloadModalData}
       />
     </div>
   );

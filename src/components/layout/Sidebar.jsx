@@ -36,14 +36,14 @@ export const Sidebar = () => {
   );
 
   return (
-    <aside className="hidden lg:flex flex-col w-64 bg-slate-900 text-slate-300 h-screen sticky top-0 border-r border-slate-800 shrink-0 z-30 select-none">
+    <aside className="hidden lg:flex flex-col w-20 xl:w-64 bg-slate-900 text-slate-300 h-screen sticky top-0 border-r border-slate-800 shrink-0 z-30 select-none transition-all duration-300">
       {/* Brand Header */}
-      <div className="p-6 border-b border-slate-800/80">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-full overflow-hidden shrink-0 shadow-lg shadow-puko-950/40 bg-white p-0.5 border border-puko-500/30 flex items-center justify-center">
+      <div className="p-3.5 xl:p-6 border-b border-slate-800/80">
+        <div className="flex items-center justify-center xl:justify-start gap-3">
+          <div className="w-10 h-10 xl:w-11 xl:h-11 rounded-full overflow-hidden shrink-0 shadow-lg shadow-puko-950/40 bg-white p-0.5 border border-puko-500/30 flex items-center justify-center">
             <img src="/logo.png" alt="PUKO Logo" className="w-full h-full object-cover rounded-full" />
           </div>
-          <div>
+          <div className="hidden xl:block min-w-0">
             <div className="flex items-center gap-1.5">
               <h1 className="font-extrabold text-lg text-white tracking-wider">
                 {user?.isDemo ? 'PUKO (mode demo)' : (settings?.storeName || 'PUKO')}
@@ -60,8 +60,8 @@ export const Sidebar = () => {
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 px-3 py-6 space-y-1.5 overflow-y-auto">
-        <div className="px-3 pb-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+      <nav className="flex-1 px-2 xl:px-3 py-4 xl:py-6 space-y-1.5 overflow-y-auto">
+        <div className="hidden xl:flex px-3 pb-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider items-center justify-between">
           <span>Menu Utama</span>
           {user?.role === 'KASIR' && (
             <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded font-mono font-bold">
@@ -75,8 +75,9 @@ export const Sidebar = () => {
             <NavLink
               key={item.path}
               to={item.path}
+              title={item.label}
               className={({ isActive }) => `
-                flex items-center justify-between px-3.5 py-3 rounded-xl text-sm font-medium transition-all duration-150
+                flex items-center justify-center xl:justify-between px-2 xl:px-3.5 py-3 rounded-xl text-sm font-medium transition-all duration-150 relative group
                 ${
                   isActive
                     ? 'bg-puko-600 text-white font-semibold shadow-md shadow-puko-950/40'
@@ -84,18 +85,25 @@ export const Sidebar = () => {
                 }
               `}
             >
-              <div className="flex items-center gap-3">
-                <Icon className="w-5 h-5 shrink-0" />
-                <span>{item.label}</span>
+              <div className="flex items-center justify-center xl:justify-start gap-3">
+                <div className="relative flex items-center justify-center">
+                  <Icon className="w-5 h-5 shrink-0" />
+                  {item.path === '/kasir' && totalItemsCount > 0 && (
+                    <span className="xl:hidden absolute -top-1.5 -right-2 bg-amber-400 text-slate-900 text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
+                      {totalItemsCount}
+                    </span>
+                  )}
+                </div>
+                <span className="hidden xl:inline">{item.label}</span>
               </div>
 
-              {/* Badges for active cart or tag */}
+              {/* Desktop xl Badges for active cart or tag */}
               {item.path === '/kasir' && totalItemsCount > 0 ? (
-                <span className="bg-amber-400 text-slate-900 text-xs font-extrabold px-2 py-0.5 rounded-full animate-pulse">
+                <span className="hidden xl:inline-block bg-amber-400 text-slate-900 text-xs font-extrabold px-2 py-0.5 rounded-full animate-pulse">
                   {totalItemsCount}
                 </span>
               ) : item.badge ? (
-                <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">
+                <span className="hidden xl:inline-block text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">
                   {item.badge}
                 </span>
               ) : null}
@@ -105,8 +113,8 @@ export const Sidebar = () => {
       </nav>
 
       {/* Footer / User status & Logout card */}
-      <div className="p-3.5 m-3 rounded-2xl bg-slate-800/60 border border-slate-700/60 space-y-3">
-        <div className="flex items-center gap-2.5">
+      <div className="p-2 xl:p-3.5 m-2 xl:m-3 rounded-2xl bg-slate-800/60 border border-slate-700/60 space-y-2 xl:space-y-3">
+        <div className="flex items-center justify-center xl:justify-start gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-slate-700/60 border border-slate-600/50 text-slate-300 flex items-center justify-center font-bold text-base shadow-xs shrink-0 overflow-hidden">
             {user?.role === 'ADMIN' ? (
               <ShieldCheck className="w-4 h-4 text-amber-300" />
@@ -116,7 +124,7 @@ export const Sidebar = () => {
               <User className="w-5 h-5 text-slate-300" />
             )}
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 hidden xl:block">
             <p className="text-xs font-bold text-white truncate">
               {user?.name || (user?.role === 'ADMIN' ? 'Administrator' : 'Kasir 01')}
             </p>
@@ -142,10 +150,11 @@ export const Sidebar = () => {
         <button
           type="button"
           onClick={logout}
-          className="w-full py-2 px-3 rounded-xl bg-slate-900/60 hover:bg-rose-500/20 hover:text-rose-300 text-slate-400 text-xs font-bold flex items-center justify-center gap-2 border border-slate-700/50 hover:border-rose-500/40 transition-all cursor-pointer"
+          title="Keluar (Logout)"
+          className="w-full py-2 px-2 xl:px-3 rounded-xl bg-slate-900/60 hover:bg-rose-500/20 hover:text-rose-300 text-slate-400 text-xs font-bold flex items-center justify-center gap-2 border border-slate-700/50 hover:border-rose-500/40 transition-all cursor-pointer"
         >
-          <LogOut className="w-3.5 h-3.5" />
-          <span>Keluar (Logout)</span>
+          <LogOut className="w-3.5 h-3.5 shrink-0" />
+          <span className="hidden xl:inline">Keluar (Logout)</span>
         </button>
       </div>
     </aside>

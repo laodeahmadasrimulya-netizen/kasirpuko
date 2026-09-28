@@ -20,7 +20,7 @@ export const MainLayout = () => {
         <Topbar />
 
         {/* Dynamic Page Routed Content */}
-        <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
+        <main className="flex-1 p-3 sm:p-4 xl:p-6 overflow-y-auto">
           <Outlet />
         </main>
       </div>

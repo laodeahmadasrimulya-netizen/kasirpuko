@@ -343,10 +343,10 @@ export const CartPanel = () => {
               fullWidth
               disabled={isCartEmpty}
               onClick={() => handleOpenPayment('TUNAI')}
-              className="shadow-lg shadow-puko-700/25 bg-puko-600 hover:bg-puko-700 py-3.5 text-base font-extrabold tracking-wide cursor-pointer"
+              className="shadow-lg shadow-puko-700/25 bg-puko-600 hover:bg-puko-700 py-3 xl:py-3.5 text-sm xl:text-base font-extrabold tracking-wide cursor-pointer"
             >
-              <span>Pilih Pembayaran • {formatIDR(total)}</span>
-              <ArrowRight className="w-5 h-5 ml-2" />
+              <span className="truncate"><span className="hidden xl:inline">Pilih </span>Pembayaran • {formatIDR(total)}</span>
+              <ArrowRight className="w-4 h-4 xl:w-5 xl:h-5 ml-1.5 xl:ml-2 shrink-0" />
             </Button>
 
             <button

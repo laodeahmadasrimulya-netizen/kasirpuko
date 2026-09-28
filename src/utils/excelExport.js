@@ -985,15 +985,26 @@ export const exportTransactionsToExcel = async (
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
     });
 
-    await downloadOrShareFile({
+    const result = await downloadOrShareFile({
       filename,
       blob,
       base64Data,
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       title: `Laporan Keuangan PUKO (${periodLabel || 'Semua Waktu'})`,
     });
+
+    return {
+      filename,
+      blob,
+      base64Data,
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      title: `Laporan Keuangan PUKO (${periodLabel || 'Semua Waktu'})`,
+      sizeLabel: `${Math.round(blob.size / 1024)} KB`,
+      ...result,
+    };
   } catch (err) {
     console.warn('Fallback to XLSX.writeFile:', err);
     XLSX.writeFile(wb, filename);
+    return null;
   }
 };

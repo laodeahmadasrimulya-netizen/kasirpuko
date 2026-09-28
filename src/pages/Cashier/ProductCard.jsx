@@ -25,7 +25,7 @@ export const ProductCard = ({ product, onAddToCart, inCartQty = 0 }) => {
     >
       <div>
         {/* Product Image Container */}
-        <div className="relative w-full h-32 sm:h-44 bg-slate-100 overflow-hidden">
+        <div className="relative w-full h-28 sm:h-36 lg:h-32 xl:h-40 bg-slate-100 overflow-hidden">
           {productImage ? (
             <img
               src={productImage}
@@ -77,23 +77,23 @@ export const ProductCard = ({ product, onAddToCart, inCartQty = 0 }) => {
         </div>
 
         {/* Product Details */}
-        <div className="p-2.5 sm:p-4">
-          <h4 className="font-extrabold text-slate-800 text-xs sm:text-sm md:text-base leading-snug group-hover:text-puko-700 transition-colors line-clamp-1">
+        <div className="p-2.5 sm:p-3 xl:p-4">
+          <h4 className="font-extrabold text-slate-800 text-xs sm:text-sm xl:text-base leading-snug group-hover:text-puko-700 transition-colors line-clamp-1">
             {productName}
           </h4>
-          <p className="text-[11px] sm:text-xs text-slate-500 line-clamp-1 sm:line-clamp-2 leading-snug sm:leading-relaxed mt-0.5 sm:mt-1 min-h-[1rem] sm:min-h-[2rem]">
+          <p className="text-[11px] sm:text-xs text-slate-500 line-clamp-1 xl:line-clamp-2 leading-snug sm:leading-relaxed mt-0.5 sm:mt-1 min-h-[1rem] xl:min-h-[2rem]">
             {productDesc}
           </p>
         </div>
       </div>
 
       {/* Price & Action Button Footer */}
-      <div className="px-2.5 sm:px-4 pb-2.5 sm:pb-4 pt-1.5 sm:pt-2 border-t border-slate-100 flex items-center justify-between gap-1">
+      <div className="px-2.5 sm:px-3 xl:px-4 pb-2.5 sm:pb-3 xl:pb-4 pt-1.5 sm:pt-2 border-t border-slate-100 flex items-center justify-between gap-1">
         <div className="min-w-0">
           <span className="text-[9px] sm:text-[10px] font-semibold uppercase text-slate-400 block leading-tight">
             Harga
           </span>
-          <span className="font-extrabold text-puko-800 text-xs sm:text-base md:text-lg block truncate">
+          <span className="font-extrabold text-puko-800 text-xs sm:text-sm xl:text-base block truncate">
             {formatIDR(productPrice)}
           </span>
         </div>
@@ -101,7 +101,7 @@ export const ProductCard = ({ product, onAddToCart, inCartQty = 0 }) => {
         {isAvailable ? (
           <button
             type="button"
-            className="p-1.5 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl bg-puko-50 text-puko-700 font-bold text-xs flex items-center justify-center gap-1 group-hover:bg-puko-600 group-hover:text-white transition-all duration-200 shadow-sm shrink-0"
+            className="p-1.5 sm:px-2.5 sm:py-1.5 xl:px-3 xl:py-2 rounded-lg sm:rounded-xl bg-puko-50 text-puko-700 font-bold text-xs flex items-center justify-center gap-1 group-hover:bg-puko-600 group-hover:text-white transition-all duration-200 shadow-sm shrink-0"
           >
             <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span className="hidden sm:inline">Tambah</span>

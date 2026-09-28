@@ -26,10 +26,10 @@ export const CashierPage = () => {
   };
 
   return (
-    <div className="h-full flex flex-col lg:flex-row gap-6">
+    <div className="h-full flex flex-col lg:flex-row gap-4 xl:gap-6">
       {/* Left Column: Product Catalog */}
       <div
-        className={`flex-1 flex flex-col min-w-0 space-y-4 ${
+        className={`flex-1 flex flex-col min-w-0 space-y-3 sm:space-y-4 ${
           totalItemsCount > 0 ? 'pb-24 lg:pb-0' : ''
         }`}
       >
@@ -69,13 +69,13 @@ export const CashierPage = () => {
         {/* Product Grid */}
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-3.5 xl:gap-4">
               {[1, 2, 3, 4, 5, 6].map((n) => (
                 <div
                   key={n}
-                  className="bg-white rounded-2xl h-52 sm:h-64 p-3 sm:p-4 animate-pulse border border-slate-200 flex flex-col justify-between"
+                  className="bg-white rounded-2xl h-48 sm:h-56 xl:h-64 p-3 sm:p-4 animate-pulse border border-slate-200 flex flex-col justify-between"
                 >
-                  <div className="w-full h-24 sm:h-28 bg-slate-200 rounded-xl mb-2 sm:mb-3" />
+                  <div className="w-full h-24 sm:h-28 xl:h-32 bg-slate-200 rounded-xl mb-2 sm:mb-3" />
                   <div className="space-y-1.5 sm:space-y-2">
                     <div className="h-3.5 sm:h-4 bg-slate-200 rounded w-3/4" />
                     <div className="h-3 bg-slate-100 rounded w-1/2" />
@@ -95,7 +95,7 @@ export const CashierPage = () => {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-3 gap-2.5 sm:gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-3.5 xl:gap-4">
               {filteredProducts.map((product) => (
                 <ProductCard
                   key={product.id}
@@ -110,7 +110,7 @@ export const CashierPage = () => {
       </div>
 
       {/* Right Column: Active Cart / POS Bill Panel (Desktop: Sidebar, Mobile: Floating triggers inside CartPanel) */}
-      <div className="lg:w-[380px] xl:w-[420px] shrink-0 lg:h-[calc(100vh-6.5rem)] lg:sticky lg:top-20">
+      <div className="lg:w-[320px] xl:w-[380px] 2xl:w-[420px] shrink-0 lg:h-[calc(100vh-6.5rem)] lg:sticky lg:top-20">
         <CartPanel />
       </div>
     </div>
