@@ -48,7 +48,7 @@ export const Sidebar = () => {
               </span>
             </div>
             <p className="text-[11px] text-puko-100 font-medium truncate max-w-[140px]">
-              {settings?.tagline || 'Alpukat Kocok No Serat'}
+              {settings?.tagline || ''}
             </p>
           </div>
         </div>

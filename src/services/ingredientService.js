@@ -381,6 +381,25 @@ export const ingredientService = {
   },
 
   /**
+   * Update ingredient details (icon, name, unit, etc.)
+   */
+  updateIngredient(ingredientId, data) {
+    const current = this.getAll();
+    if (!current[ingredientId]) return current;
+
+    const updated = {
+      ...current,
+      [ingredientId]: {
+        ...current[ingredientId],
+        ...data,
+      },
+    };
+
+    this.save(updated);
+    return updated;
+  },
+
+  /**
    * Delete custom raw ingredient
    */
   deleteIngredient(ingredientId) {

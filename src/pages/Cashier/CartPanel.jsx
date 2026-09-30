@@ -86,7 +86,7 @@ export const CartPanel = () => {
     try {
       const cashierName = user
         ? (user.role === 'ADMIN'
-            ? (user.name === 'Owner / Supervisor' ? 'Owner' : (user.name || 'Owner'))
+            ? (user.name || 'Owner')
             : (user.name || 'Kasir 01'))
         : (settings?.cashierName || 'Kasir 01');
 

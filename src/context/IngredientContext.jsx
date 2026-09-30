@@ -64,6 +64,13 @@ export const IngredientProvider = ({ children }) => {
     return updated;
   }, []);
 
+  // Update ingredient details (icon, name, etc.)
+  const updateIngredient = useCallback((id, data) => {
+    const updated = ingredientService.updateIngredient(id, data);
+    setIngredients(updated);
+    return updated;
+  }, []);
+
   // Delete custom ingredient
   const deleteIngredient = useCallback((id) => {
     const updated = ingredientService.deleteIngredient(id);
@@ -91,6 +98,7 @@ export const IngredientProvider = ({ children }) => {
     adjustStock,
     updateStock,
     addIngredient,
+    updateIngredient,
     deleteIngredient,
     updatePortion,
     resetIngredients,

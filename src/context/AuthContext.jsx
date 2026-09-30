@@ -170,6 +170,25 @@ export const AuthProvider = ({ children }) => {
             };
           });
           setUsers(mapped);
+          setUser((curr) => {
+            if (!curr) return curr;
+            const fresh = mapped.find(
+              (m) => m.id === curr.id || (curr.role === 'ADMIN' && m.role === 'ADMIN')
+            );
+            if (fresh) {
+              const merged = {
+                ...curr,
+                name: fresh.name || curr.name,
+                phone: fresh.phone || curr.phone,
+                username: fresh.username || curr.username,
+              };
+              try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+              } catch {}
+              return merged;
+            }
+            return curr;
+          });
         }
       });
   }, []);
@@ -202,9 +221,16 @@ export const AuthProvider = ({ children }) => {
     }
     storeService.setActiveStoreId(storeId);
 
+    const savedUserStr = localStorage.getItem(STORAGE_KEY);
+    let savedLocalUser = null;
+    try {
+      if (savedUserStr) savedLocalUser = JSON.parse(savedUserStr);
+    } catch {}
+
     const resolvedName =
       authUser.user_metadata?.name ||
       matched?.name ||
+      (savedLocalUser?.name && savedLocalUser.name !== 'Owner / Supervisor' ? savedLocalUser.name : '') ||
       (isPrimaryOwner ? 'Owner' : authUser.email?.split('@')[0] || 'Pengguna');
 
     const activeUser = {

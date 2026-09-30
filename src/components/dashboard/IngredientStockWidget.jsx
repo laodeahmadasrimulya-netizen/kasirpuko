@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Boxes,
   Pencil,
@@ -11,8 +11,69 @@ import {
   Trash2,
   PackagePlus,
   ArrowLeft,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { useIngredients } from '../../context/IngredientContext';
+
+const isImage = (val) => {
+  if (!val || typeof val !== 'string') return false;
+  return (
+    val.startsWith('data:image/') ||
+    val.startsWith('http://') ||
+    val.startsWith('https://') ||
+    val.startsWith('/') ||
+    val.startsWith('blob:')
+  );
+};
+
+const renderIconOrImage = (icon, alt = '', className = 'w-full h-full object-cover') => {
+  if (!icon) return <span className="text-xl">📦</span>;
+  if (isImage(icon)) {
+    return <img src={icon} alt={alt} className={className} />;
+  }
+  return <span className="text-xl sm:text-2xl leading-none select-none">{icon}</span>;
+};
+
+const compressImage = (file, maxWidth = 180, maxHeight = 180, quality = 0.85) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = (e) => {
+      const img = new window.Image();
+      img.onerror = reject;
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        let dataUrl = canvas.toDataURL('image/webp', quality);
+        if (!dataUrl.startsWith('data:image/webp')) {
+          dataUrl = canvas.toDataURL('image/jpeg', quality);
+        }
+        resolve(dataUrl);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+};
 
 const formatCompactStock = (val, ingredient) => {
   const num = Number(val) || 0;
@@ -49,6 +110,7 @@ export const IngredientStockWidget = () => {
     adjustStock,
     updateStock,
     addIngredient,
+    updateIngredient,
     deleteIngredient,
     updatePortion,
     resetIngredients,
@@ -79,10 +141,45 @@ export const IngredientStockWidget = () => {
   // Add new stock item state
   const [isAddStockOpen, setIsAddStockOpen] = useState(false);
   const [newStockName, setNewStockName] = useState('');
-  const [newStockIcon, setNewStockIcon] = useState('🍫');
+  const [newStockIcon, setNewStockIcon] = useState('📦');
   const [newStockType, setNewStockType] = useState('weight'); // 'weight' | 'volume' | 'pcs'
   const [newStockInitial, setNewStockInitial] = useState('5');
   const [newStockPortion, setNewStockPortion] = useState('20');
+
+  // File upload refs
+  const fileInputRef = useRef(null);
+  const editFileInputRef = useRef(null);
+
+  // Image upload handlers
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await compressImage(file);
+      setNewStockIcon(compressed);
+    } catch (err) {
+      console.error('Gagal memproses gambar:', err);
+      showToast('Gagal memproses gambar. Pastikan format JPG, PNG, atau WEBP.');
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setNewStockIcon('📦');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleEditImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedKey) return;
+    try {
+      const compressed = await compressImage(file);
+      updateIngredient(selectedKey, { icon: compressed });
+      showToast(`Gambar "${currentSelected?.name || 'Bahan'}" berhasil diganti!`);
+    } catch (err) {
+      console.error('Gagal memproses gambar:', err);
+      showToast('Gagal memproses gambar.');
+    }
+  };
 
   // Portions draft state
   const [portionDraft, setPortionDraft] = useState({});
@@ -261,7 +358,8 @@ export const IngredientStockWidget = () => {
     setIsEditModalOpen(false);
     handleSelectIngredient(id);
     setNewStockName('');
-    setNewStockIcon('');
+    setNewStockIcon('📦');
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   // Execute delete after confirmation
@@ -375,8 +473,8 @@ export const IngredientStockWidget = () => {
               >
                 {/* Top Row: Icon & Name */}
                 <div className="flex items-center gap-2.5">
-                  <span className="text-2xl p-1.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 shadow-2xs">
-                    {data.icon}
+                  <span className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 shadow-2xs overflow-hidden">
+                    {renderIconOrImage(data.icon, data.name, 'w-full h-full object-cover')}
                   </span>
                   <h4 className="font-bold text-slate-900 text-sm sm:text-base leading-tight">
                     {data.name}
@@ -491,39 +589,51 @@ export const IngredientStockWidget = () => {
                     />
                   </div>
 
-                  {/* Pilihan Ikon */}
+                  {/* Pilihan Ikon / Gambar */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Ikon:
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      Ikon / Gambar Bahan:
                     </label>
-                    <div className="flex items-center gap-2">
-                      <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-xl shrink-0 select-none shadow-2xs">
-                        {newStockIcon.trim() || '📦'}
+                    <div className="flex items-center gap-3">
+                      {/* Preview Box */}
+                      <div className="w-14 h-14 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-300 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs relative">
+                        {renderIconOrImage(newStockIcon, newStockName || 'Bahan', 'w-full h-full object-cover')}
                       </div>
-                      <input
-                        type="text"
-                        value={newStockIcon}
-                        onChange={(e) => setNewStockIcon(e.target.value)}
-                        placeholder="Pilih atau ketik ikon dari HP (misal: 🍫, 🧀)"
-                        className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-puko-500 text-sm font-bold text-slate-900"
-                      />
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                      <span className="text-[10px] text-slate-400 font-medium">Contoh:</span>
-                      {['🍫', '🧀', '🍯', '🥥', '🍓', '☕', '🥤', '🧊', '📦'].map((emoji) => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          onClick={() => setNewStockIcon(emoji)}
-                          className={`w-6 h-6 rounded-md text-xs flex items-center justify-center transition-all cursor-pointer ${
-                            newStockIcon === emoji
-                              ? 'bg-slate-800 text-white shadow-2xs scale-105'
-                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          {emoji}
-                        </button>
-                      ))}
+
+                      {/* Upload and Clear Controls */}
+                      <div className="flex-1 space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="file"
+                            ref={fileInputRef}
+                            accept="image/*"
+                            onChange={handleImageUpload}
+                            className="hidden"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="px-3 py-2 rounded-xl text-xs font-extrabold bg-slate-900 text-white hover:bg-slate-800 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                          >
+                            <ImageIcon className="w-3.5 h-3.5" />
+                            <span>{isImage(newStockIcon) ? 'Ganti Gambar' : 'Pilih Gambar'}</span>
+                          </button>
+
+                          {isImage(newStockIcon) && (
+                            <button
+                              type="button"
+                              onClick={handleRemoveImage}
+                              className="px-2.5 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 transition-all cursor-pointer"
+                              title="Hapus gambar & kembali ke ikon bawaan"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-medium">
+                          Bisa upload foto dari HP atau komputer (JPG, PNG, WEBP)
+                        </p>
+                      </div>
                     </div>
                   </div>
 
@@ -628,7 +738,9 @@ export const IngredientStockWidget = () => {
                             : 'border-slate-200 hover:bg-slate-50 text-slate-600 font-bold'
                         }`}
                       >
-                        <span className="text-xl sm:text-2xl">{item.icon}</span>
+                        <div className="w-8 h-8 rounded-xl bg-white/80 border border-slate-200/60 flex items-center justify-center overflow-hidden shrink-0">
+                          {renderIconOrImage(item.icon, item.name)}
+                        </div>
                         <span className="text-[10px] sm:text-[11px] leading-tight truncate w-full text-center">
                           {item.name}
                         </span>
@@ -641,7 +753,7 @@ export const IngredientStockWidget = () => {
                     type="button"
                     onClick={() => {
                       setNewStockName('');
-                      setNewStockIcon('');
+                      setNewStockIcon('📦');
                       setNewStockType('weight');
                       setNewStockInitial('5');
                       setNewStockPortion('20');
@@ -657,6 +769,40 @@ export const IngredientStockWidget = () => {
                       Tambah
                     </span>
                   </button>
+                </div>
+
+                {/* Info & Ganti Gambar Bahan Terpilih */}
+                <div className="flex items-center justify-between p-2.5 sm:p-3 rounded-2xl bg-slate-50 border border-slate-200/80 mb-1">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs">
+                      {renderIconOrImage(currentSelected?.icon, currentSelected?.name)}
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900 leading-tight">
+                        {currentSelected?.name}
+                      </h4>
+                      <p className="text-[10px] text-slate-500 font-medium">
+                        {isImage(currentSelected?.icon) ? 'Foto / gambar kustom' : 'Ikon emoji'}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <input
+                      type="file"
+                      ref={editFileInputRef}
+                      accept="image/*"
+                      onChange={handleEditImageUpload}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => editFileInputRef.current?.click()}
+                      className="px-2.5 py-1.5 rounded-xl text-[11px] font-extrabold bg-white text-slate-700 hover:text-slate-950 border border-slate-300 hover:bg-slate-100 flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
+                    >
+                      <ImageIcon className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Ganti Gambar</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Stok Awal (Bisa diedit sebagai patokan kapasitas) */}
@@ -805,8 +951,11 @@ export const IngredientStockWidget = () => {
               {ingredientList.map((item) => (
                 <div key={item.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200">
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
-                      <span>{item.icon}</span> {item.name}
+                    <label className="text-xs font-extrabold text-slate-800 flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-md bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+                        {renderIconOrImage(item.icon, item.name)}
+                      </div>
+                      <span>{item.name}</span>
                     </label>
                   </div>
                   <div className="relative">

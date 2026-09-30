@@ -98,7 +98,7 @@ export const SettingsPage = () => {
     if (settings) {
       setForm({
         storeName: settings.storeName || 'PUKO',
-        tagline: settings.tagline || 'Alpukat Kocok No Serat No Pahit',
+        tagline: settings.tagline !== undefined ? settings.tagline : 'Alpukat Kocok No Serat No Pahit',
         branch: settings.branch || '',
         address: settings.address || '',
         phone: settings.phone || '',
@@ -128,6 +128,23 @@ export const SettingsPage = () => {
     e.preventDefault();
     setSoundEnabled(form.enableSound);
     await updateSettings(form);
+
+    // Jika storeName diubah di form Usaha Saya, sinkronkan juga ke akun Owner aktif
+    if (isAdmin && currentUser && form.storeName?.trim()) {
+      try {
+        await updateUser(currentUser.id, {
+          name: form.storeName.trim(),
+          username: currentUser.username,
+          pin: currentUser.pin,
+          phone: form.phone || currentUser.phone,
+          email: currentUser.email,
+          role: currentUser.role,
+        });
+      } catch (syncErr) {
+        console.warn('Sync storeName to currentUser notice:', syncErr);
+      }
+    }
+
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
   };
@@ -190,27 +207,45 @@ export const SettingsPage = () => {
           throw new Error('Password akun Owner minimal 6 karakter.');
         }
 
+        const trimmedName = userFormData.name.trim();
+
         // Update user
         await updateUser(editingUser.id, {
-          name: userFormData.name,
+          name: trimmedName,
           username: userFormData.username,
           pin: userFormData.pin,
           phone: userFormData.phone,
           email: userFormData.email,
           role: editingUser.role || 'KASIR',
         });
-        setUserSuccessMessage(`Akun "${userFormData.name}" berhasil diperbarui!`);
+
+        // Jika yang diedit adalah akun Owner (ADMIN),
+        // otomatis sinkronkan nama toko (storeName) di pengaturan & Supabase store_settings
+        // agar tampilan nama di Beranda/Dashboard dan Struk langsung berubah & permanen saat dibuka kembali!
+        if (editingUser.role === 'ADMIN' && trimmedName) {
+          try {
+            await updateSettings({
+              ...settings,
+              storeName: trimmedName,
+            });
+            setForm((prev) => ({ ...prev, storeName: trimmedName }));
+          } catch (syncErr) {
+            console.warn('Sync storeName on owner account update notice:', syncErr);
+          }
+        }
+
+        setUserSuccessMessage(`Akun "${trimmedName}" berhasil diperbarui!`);
       } else {
         // Add new user
         await addUser({
-          name: userFormData.name,
+          name: userFormData.name.trim(),
           username: userFormData.username,
           pin: userFormData.pin,
           phone: userFormData.phone,
           email: userFormData.email,
           role: 'KASIR',
         });
-        setUserSuccessMessage(`Kasir baru "${userFormData.name}" berhasil ditambahkan!`);
+        setUserSuccessMessage(`Kasir baru "${userFormData.name.trim()}" berhasil ditambahkan!`);
       }
 
       handleCloseUserModal();

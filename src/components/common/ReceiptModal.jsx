@@ -335,9 +335,11 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
               <h2 className="text-xl font-black tracking-widest text-slate-950 font-sans uppercase">
                 {settings?.storeName || 'PUKO'}
               </h2>
-              <p className="text-[11px] font-bold text-slate-700 font-sans tracking-tight mt-0.5">
-                {settings?.tagline || 'Alpukat Kocok No Serat No Pahit'}
-              </p>
+              {settings?.tagline ? (
+                <p className="text-[11px] font-bold text-slate-700 font-sans tracking-tight mt-0.5">
+                  {settings.tagline}
+                </p>
+              ) : null}
               {settings?.branch && (
                 <p className="text-[10px] text-slate-500 mt-1">
                   {settings.branch}
@@ -372,8 +374,8 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
                 <span className="text-slate-500">Kasir:</span>
                 <span className="font-semibold text-slate-800">
                   {transaction.cashierName
-                    ? (transaction.cashierName === 'Owner / Supervisor' ? 'Owner' : transaction.cashierName)
-                    : (user?.role === 'ADMIN' ? 'Owner' : (user?.name || settings?.cashierName || 'Kasir 01'))}
+                    ? (transaction.cashierName === 'Owner / Supervisor' ? (user?.name || 'Owner') : transaction.cashierName)
+                    : (user?.role === 'ADMIN' ? (user?.name || 'Owner') : (user?.name || settings?.cashierName || 'Kasir 01'))}
                 </span>
               </div>
               <div className="flex justify-between">

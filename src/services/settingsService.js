@@ -11,7 +11,7 @@ const getStorageKey = () => {
 // Pemetaan dari kolom Supabase (snake_case) ke format aplikasi (camelCase)
 const mapFromDB = (data) => ({
   storeName: data.store_name || DEFAULT_SETTINGS.storeName,
-  tagline: data.tagline || DEFAULT_SETTINGS.tagline,
+  tagline: data.tagline !== undefined && data.tagline !== null ? data.tagline : DEFAULT_SETTINGS.tagline,
   branch: data.branch || DEFAULT_SETTINGS.branch,
   address: data.address || DEFAULT_SETTINGS.address,
   phone: data.phone || DEFAULT_SETTINGS.phone,
