@@ -94,11 +94,6 @@ export const TransactionsPage = () => {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [reportFormat, setReportFormat] = useState('a4'); // Standar A4 universal
-  const [toastMessage, setToastMessage] = useState('');
-  const showToast = (msg) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(''), 4500);
-  };
 
   const reportRef = useRef(null);
 
@@ -454,20 +449,12 @@ export const TransactionsPage = () => {
       // Pastikan render DOM stabil
       await new Promise((resolve) => setTimeout(resolve, 200));
 
-      const isMobile =
-        typeof navigator !== 'undefined' &&
-        (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '') ||
-          (typeof window !== 'undefined' && window.innerWidth < 768));
-
       const canvas = await html2canvas(element, {
-        scale: isMobile ? 1.2 : 1.5, // Skala 1.2x di HP hemat memori RAM & cegah crash canvas
+        scale: 1.5, // 1.5x scale saves RAM on mobile while remaining sharp on A4 PDF
         useCORS: true,
         allowTaint: false,
         logging: false,
         backgroundColor: '#ffffff',
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: 750,
       });
 
       const pdf = new jsPDF('p', 'mm', 'a4');
@@ -503,17 +490,13 @@ export const TransactionsPage = () => {
       const pdfBlob = pdf.output('blob');
       const pdfBase64 = pdf.output('datauristring').split(',')[1];
 
-      const res = await downloadOrShareFile({
+      await downloadOrShareFile({
         filename,
         blob: pdfBlob,
         base64Data: pdfBase64,
         mimeType: 'application/pdf',
         title: `Laporan Transaksi PUKO (${periodLabel || 'Semua'})`,
       });
-
-      if (res?.success) {
-        showToast(`Laporan PDF "${filename}" berhasil diunduh! Periksa notifikasi / folder Download HP.`);
-      }
     } catch (err) {
       console.error('Failed to export PDF:', err);
       alert('Gagal membuat dokumen PDF: ' + (err?.message || 'Silakan coba lagi.'));
@@ -629,7 +612,7 @@ export const TransactionsPage = () => {
         return;
       }
       setIsExportingExcel(true);
-      const res = await exportTransactionsToExcel({
+      await exportTransactionsToExcel({
         transactions: filteredTransactions,
         periodLabel,
         summary,
@@ -641,10 +624,6 @@ export const TransactionsPage = () => {
         storeSettings: settings,
         printedBy,
       });
-
-      if (res?.success) {
-        showToast(`Laporan Excel "${res.filename}" berhasil diunduh! Periksa notifikasi / folder Download HP.`);
-      }
     } catch (err) {
       console.error('Error saat ekspor Excel:', err);
       alert('Terjadi kesalahan saat memproses ekspor Excel: ' + (err?.message || 'Silakan coba lagi.'));
@@ -1024,15 +1003,12 @@ export const TransactionsPage = () => {
       {/* ========================================================================= */}
       <div
         style={{
-          position: 'absolute',
+          position: 'fixed',
+          left: '-9999px',
           top: 0,
-          left: 0,
           width: '750px',
           zIndex: -9999,
-          opacity: 0,
           pointerEvents: 'none',
-          overflow: 'hidden',
-          height: isExportingPdf ? 'auto' : '1px',
         }}
         aria-hidden="true"
       >
@@ -1042,39 +1018,40 @@ export const TransactionsPage = () => {
           style={{
             width: '750px',
             maxWidth: '750px',
-            backgroundColor: '#ffffff',
-            color: '#0f172a',
-            padding: '28px 32px',
-            fontFamily:
-              'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-            fontSize: '11px',
-            borderRadius: '8px',
-            boxShadow: '0 4px 20px -2px rgba(0, 0, 0, 0.1)',
-            boxSizing: 'border-box',
-          }}
-        >
-          {/* Header Dokumen Laporan */}
-          <div
-            style={{
-              borderBottom: '1px solid #94a3b8',
-              paddingBottom: reportFormat === 'mobile' ? '10px' : '14px',
-              marginBottom: reportFormat === 'mobile' ? '12px' : '16px',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: reportFormat === 'mobile' ? 'column' : 'row',
-                justifyContent: 'space-between',
-                alignItems: reportFormat === 'mobile' ? 'flex-start' : 'center',
-                gap: reportFormat === 'mobile' ? '8px' : '0px',
+                backgroundColor: '#ffffff',
+                color: '#0f172a',
+                padding: '28px 32px',
+                fontFamily:
+                  'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                fontSize: '11px',
+                borderRadius: '8px',
+                boxShadow: '0 4px 20px -2px rgba(0, 0, 0, 0.1)',
+                boxSizing: 'border-box',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <img
-                  src="/logo.png"
-                  alt="Logo PUKO"
+              {/* Header Dokumen Laporan */}
+              <div
+                style={{
+                  borderBottom: '1px solid #94a3b8',
+                  paddingBottom: reportFormat === 'mobile' ? '10px' : '14px',
+                  marginBottom: reportFormat === 'mobile' ? '12px' : '16px',
+                }}
+              >
+                <div
                   style={{
+                    display: 'flex',
+                    flexDirection: reportFormat === 'mobile' ? 'column' : 'row',
+                    justifyContent: 'space-between',
+                    alignItems: reportFormat === 'mobile' ? 'flex-start' : 'center',
+                    gap: reportFormat === 'mobile' ? '8px' : '0px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <img
+                      src="/logo.png"
+                      alt="Logo PUKO"
+                      crossOrigin="anonymous"
+                      style={{
                         width: reportFormat === 'mobile' ? '38px' : '44px',
                         height: reportFormat === 'mobile' ? '38px' : '44px',
                         objectFit: 'contain',
@@ -2179,13 +2156,6 @@ export const TransactionsPage = () => {
           setDateFilter('MONTH');
         }}
       />
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 border border-slate-700 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-2 duration-200 max-w-sm">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-          <span className="text-xs font-semibold leading-relaxed">{toastMessage}</span>
-        </div>
-      )}
     </div>
   );
 };

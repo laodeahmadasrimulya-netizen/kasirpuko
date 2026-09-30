@@ -985,7 +985,7 @@ export const exportTransactionsToExcel = async (
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
     });
 
-    return await downloadOrShareFile({
+    await downloadOrShareFile({
       filename,
       blob,
       base64Data,
@@ -995,6 +995,5 @@ export const exportTransactionsToExcel = async (
   } catch (err) {
     console.warn('Fallback to XLSX.writeFile:', err);
     XLSX.writeFile(wb, filename);
-    return { success: true, filename, method: 'xlsx-write-file' };
   }
 };
