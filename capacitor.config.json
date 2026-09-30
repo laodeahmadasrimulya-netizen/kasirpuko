@@ -4,6 +4,9 @@
   "webDir": "dist",
   "server": {
     "url": "https://kasirpuko.vercel.app",
+    "allowNavigation": [
+      "kasirpuko.vercel.app"
+    ],
     "cleartext": true,
     "androidScheme": "https",
     "errorPath": "index.html"
