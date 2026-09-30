@@ -26,7 +26,7 @@ export const ProductFormModal = ({
   onClose,
   onSubmit,
   initialData = null,
-  categories = ['Alpukat Kocok', 'Topping', 'Minuman Tambahan'],
+  categories = ['Alpukat Kocok', 'Topping'],
 }) => {
   const [formData, setFormData] = useState({
     nama: '',

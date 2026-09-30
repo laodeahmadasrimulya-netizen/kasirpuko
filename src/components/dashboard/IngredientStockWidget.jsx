@@ -772,36 +772,68 @@ export const IngredientStockWidget = () => {
                 </div>
 
                 {/* Info & Ganti Gambar Bahan Terpilih */}
-                <div className="flex items-center justify-between p-2.5 sm:p-3 rounded-2xl bg-slate-50 border border-slate-200/80 mb-1">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs">
-                      {renderIconOrImage(currentSelected?.icon, currentSelected?.name)}
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-black text-slate-900 leading-tight">
-                        {currentSelected?.name}
-                      </h4>
-                      <p className="text-[10px] text-slate-500 font-medium">
-                        {isImage(currentSelected?.icon) ? 'Foto / gambar kustom' : 'Ikon emoji'}
-                      </p>
-                    </div>
+                <div className="p-3 sm:p-3.5 rounded-2xl bg-slate-50 border border-slate-200/90 shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">
+                      Ikon / Foto Bahan:
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      {isImage(currentSelected?.icon) ? 'Foto Kustom' : 'Ikon Emoji'}
+                    </span>
                   </div>
-                  <div>
-                    <input
-                      type="file"
-                      ref={editFileInputRef}
-                      accept="image/*"
-                      onChange={handleEditImageUpload}
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => editFileInputRef.current?.click()}
-                      className="px-2.5 py-1.5 rounded-xl text-[11px] font-extrabold bg-white text-slate-700 hover:text-slate-950 border border-slate-300 hover:bg-slate-100 flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
-                    >
-                      <ImageIcon className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Ganti Gambar</span>
-                    </button>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-12 h-12 rounded-xl bg-white border border-slate-200/90 flex items-center justify-center shrink-0 overflow-hidden shadow-xs">
+                        {renderIconOrImage(currentSelected?.icon, currentSelected?.name, 'w-full h-full object-cover')}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-xs sm:text-sm font-black text-slate-900 leading-tight truncate">
+                          {currentSelected?.name}
+                        </h4>
+                        <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium">
+                          {isImage(currentSelected?.icon) ? 'Ketuk tombol untuk ganti foto' : 'Bisa diganti foto dari galeri HP'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 flex items-center gap-1.5">
+                      <input
+                        type="file"
+                        ref={editFileInputRef}
+                        accept="image/*"
+                        onChange={handleEditImageUpload}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => editFileInputRef.current?.click()}
+                        className="px-3 py-2 rounded-xl text-xs font-extrabold bg-slate-900 text-white hover:bg-slate-800 transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                      >
+                        <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Ganti Gambar</span>
+                      </button>
+
+                      {isImage(currentSelected?.icon) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const defaultIcons = {
+                              alpukat: '🥑',
+                              susuUht: '🥛',
+                              skm: '🥫',
+                            };
+                            const fallbackIcon = defaultIcons[selectedKey] || '📦';
+                            updateIngredient(selectedKey, { icon: fallbackIcon });
+                            showToast(`Ikon "${currentSelected?.name}" dikembalikan ke default.`);
+                          }}
+                          className="p-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 transition-all cursor-pointer"
+                          title="Kembalikan ke ikon standar"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 

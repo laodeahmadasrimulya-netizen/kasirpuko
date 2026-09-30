@@ -84,9 +84,6 @@ export const ProductsPage = () => {
   const toppingCount = products.filter(
     (p) => (p.category || p.kategori) === 'Topping'
   ).length;
-  const minumanCount = products.filter(
-    (p) => (p.category || p.kategori) === 'Minuman Tambahan'
-  ).length;
   const outOfStockCount = products.filter((p) => !p.isAvailable).length;
 
   return (
@@ -106,7 +103,7 @@ export const ProductsPage = () => {
       </div>
 
       {/* Category Overview Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div
           onClick={() => setSelectedCategory('Semua')}
           className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none bg-white ${
@@ -159,24 +156,6 @@ export const ProductsPage = () => {
             Topping
           </span>
           <span className="text-xl font-extrabold mt-0.5 block text-slate-900">{toppingCount}</span>
-        </div>
-
-        <div
-          onClick={() => setSelectedCategory('Minuman Tambahan')}
-          className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none bg-white ${
-            selectedCategory === 'Minuman Tambahan'
-              ? 'border-slate-800 shadow-md ring-2 ring-slate-800/10'
-              : 'border-slate-200/90 hover:border-slate-300 hover:shadow-xs'
-          }`}
-        >
-          <span
-            className={`text-[11px] font-semibold block uppercase tracking-wider ${
-              selectedCategory === 'Minuman Tambahan' ? 'text-slate-900 font-bold' : 'text-slate-500'
-            }`}
-          >
-            Minuman Tambahan
-          </span>
-          <span className="text-xl font-extrabold mt-0.5 block text-slate-900">{minumanCount}</span>
         </div>
       </div>
 
