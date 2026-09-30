@@ -392,10 +392,6 @@ export const SettingsPage = () => {
               <tbody className="divide-y divide-slate-100">
                 {users.map((u) => {
                   const isPinShown = Boolean(revealedPins[u.id]);
-                  const isSelf =
-                    currentUser?.id === u.id ||
-                    (currentUser?.email && u.email && currentUser.email.toLowerCase() === u.email.toLowerCase()) ||
-                    (currentUser?.username && u.username && currentUser.username.toLowerCase() === u.username.toLowerCase());
                   const isOwner = u.role === 'ADMIN';
 
                   return (
@@ -407,11 +403,6 @@ export const SettingsPage = () => {
                             {isOwner && (
                               <span className="text-[10px] bg-amber-100 text-amber-800 font-extrabold px-1.5 py-0.5 rounded border border-amber-200">
                                 {u.id === 'usr-admin' ? 'Owner Utama' : 'Owner'}
-                              </span>
-                            )}
-                            {isSelf && (
-                              <span className="text-[10px] bg-slate-100 text-slate-600 font-semibold px-1.5 py-0.5 rounded border border-slate-200">
-                                (Anda)
                               </span>
                             )}
                           </p>
