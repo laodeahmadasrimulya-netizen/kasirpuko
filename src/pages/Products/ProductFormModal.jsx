@@ -17,8 +17,6 @@ const PRESET_IMAGES = [
   { label: 'Milo', src: '/images/alpukat_milo.jpg' },
   { label: 'Keju', src: '/images/alpukat_keju.jpg' },
   { label: 'Oreo', src: '/images/alpukat_oreo.jpg' },
-  { label: 'Topping Keju', src: '/images/topping_keju.jpg' },
-  { label: 'Es Teh Manis', src: '/images/es_teh_manis.jpg' },
 ];
 
 export const ProductFormModal = ({
@@ -329,7 +327,7 @@ export const ProductFormModal = ({
               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
                 Atau Pilih Contoh Foto PUKO:
               </span>
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-5 gap-1.5">
                 {PRESET_IMAGES.map((preset) => (
                   <button
                     key={preset.src}
