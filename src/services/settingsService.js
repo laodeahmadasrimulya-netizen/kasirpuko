@@ -14,7 +14,7 @@ const mapFromDB = (data) => ({
   tagline: data.tagline !== undefined && data.tagline !== null ? data.tagline : DEFAULT_SETTINGS.tagline,
   branch: data.branch || DEFAULT_SETTINGS.branch,
   address: data.address || DEFAULT_SETTINGS.address,
-  phone: data.phone || DEFAULT_SETTINGS.phone,
+  phone: data.phone !== undefined && data.phone !== null ? data.phone : DEFAULT_SETTINGS.phone,
   cashierName: data.cashier_name || DEFAULT_SETTINGS.cashierName,
   receiptFooter: data.receipt_footer || DEFAULT_SETTINGS.receiptFooter,
   taxRate: Number(data.tax_rate ?? DEFAULT_SETTINGS.taxRate),
@@ -100,6 +100,15 @@ export const settingsService = {
         tagline: storeInfo?.tagline || (storeId === DEFAULT_STORE_ID ? 'Alpukat Kocok No Serat No Pahit' : 'Kasir POS Modern'),
         phone: storeInfo?.phone || (storeId === DEFAULT_STORE_ID ? '085652103647' : ''),
         address: storeInfo?.address || (storeId === DEFAULT_STORE_ID ? 'Kendari' : ''),
+      };
+      storageService.set(storageKey, settings);
+    } else if (storeInfo && storeId !== DEFAULT_STORE_ID) {
+      settings = {
+        ...settings,
+        storeName: storeInfo.name || settings.storeName,
+        tagline: storeInfo.tagline !== undefined ? storeInfo.tagline : settings.tagline,
+        phone: storeInfo.phone !== undefined ? storeInfo.phone : settings.phone,
+        address: storeInfo.address !== undefined ? storeInfo.address : settings.address,
       };
       storageService.set(storageKey, settings);
     }

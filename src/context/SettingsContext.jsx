@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { settingsService } from '../services/settingsService';
 import { storageService } from '../services/storageService';
+import { storeService, DEFAULT_STORE_ID } from '../services/storeService';
 import { DEFAULT_SETTINGS } from '../data/dummySettings';
 import { useAuth } from './AuthContext';
 
@@ -10,7 +11,9 @@ export const SettingsProvider = ({ children }) => {
   const { user } = useAuth();
   const [settings, setSettings] = useState(() => {
     try {
-      const saved = storageService.get('settings');
+      const storeId = storeService.getActiveStoreId(user);
+      const storageKey = storeId === DEFAULT_STORE_ID ? 'settings' : `settings_${storeId}`;
+      const saved = storageService.get(storageKey) || storageService.get('settings');
       if (saved) {
         const merged = { ...DEFAULT_SETTINGS, ...saved };
         if (merged.branch === 'Outlet Depan SMK Negeri 1 Kendari') {

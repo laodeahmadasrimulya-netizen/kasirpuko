@@ -129,19 +129,14 @@ export const SettingsPage = () => {
     setSoundEnabled(form.enableSound);
     await updateSettings(form);
 
-    // Jika storeName diubah di form Usaha Saya, sinkronkan juga ke akun Owner aktif
-    if (isAdmin && currentUser && form.storeName?.trim()) {
+    // Jika nomor telepon diubah di form Usaha Saya, sinkronkan ke akun Owner aktif (tanpa mengubah nama akun owner)
+    if (isAdmin && currentUser && form.phone && form.phone !== currentUser.phone) {
       try {
         await updateUser(currentUser.id, {
-          name: form.storeName.trim(),
-          username: currentUser.username,
-          pin: currentUser.pin,
-          phone: form.phone || currentUser.phone,
-          email: currentUser.email,
-          role: currentUser.role,
+          phone: form.phone,
         });
       } catch (syncErr) {
-        console.warn('Sync storeName to currentUser notice:', syncErr);
+        console.warn('Sync phone to currentUser notice:', syncErr);
       }
     }
 
@@ -219,18 +214,17 @@ export const SettingsPage = () => {
           role: editingUser.role || 'KASIR',
         });
 
-        // Jika yang diedit adalah akun Owner (ADMIN),
-        // otomatis sinkronkan nama toko (storeName) di pengaturan & Supabase store_settings
-        // agar tampilan nama di Beranda/Dashboard dan Struk langsung berubah & permanen saat dibuka kembali!
-        if (editingUser.role === 'ADMIN' && trimmedName) {
+        // Jika yang diedit adalah akun Owner (ADMIN) dan nomor telepon diisi/diubah,
+        // sinkronkan juga nomor telepon ke profil toko & form pengaturan
+        if (editingUser.role === 'ADMIN' && userFormData.phone) {
           try {
             await updateSettings({
               ...settings,
-              storeName: trimmedName,
+              phone: userFormData.phone,
             });
-            setForm((prev) => ({ ...prev, storeName: trimmedName }));
+            setForm((prev) => ({ ...prev, phone: userFormData.phone }));
           } catch (syncErr) {
-            console.warn('Sync storeName on owner account update notice:', syncErr);
+            console.warn('Sync phone on owner account update notice:', syncErr);
           }
         }
 
@@ -521,6 +515,7 @@ export const SettingsPage = () => {
               label="Nama Brand / Usaha"
               value={form.storeName}
               onChange={(e) => handleChange('storeName', e.target.value)}
+              helperText="Nama brand toko ini tampil pada bagian atas aplikasi, dashboard, dan struk belanja."
               required
             />
             <Input
@@ -763,7 +758,7 @@ export const SettingsPage = () => {
 
           <div>
             <Input
-              label={editingUser?.role === 'ADMIN' ? 'Nama Akun Owner (Tampilan di Struk & Dashboard)' : 'Nama Kasir'}
+              label={editingUser?.role === 'ADMIN' ? 'Nama Akun Owner' : 'Nama Kasir'}
               placeholder={editingUser?.role === 'ADMIN' ? 'Owner' : 'Contoh: Siti Rahma'}
               value={userFormData.name}
               onChange={(e) =>
@@ -772,7 +767,7 @@ export const SettingsPage = () => {
               icon={User}
               helperText={
                 editingUser?.role === 'ADMIN'
-                  ? 'Nama ini tampil di struk/nota dan dashboard. Anda juga bisa mengetikkan nama ini saat login.'
+                  ? 'Nama akun pemilik toko. Anda juga bisa mengetikkan nama ini saat login.'
                   : undefined
               }
               required

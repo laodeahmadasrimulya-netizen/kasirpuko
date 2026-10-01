@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { storeService, DEFAULT_STORE_ID, DEMO_STORE_ID } from '../services/storeService';
+import { storageService } from '../services/storageService';
 import { demoService } from '../services/demoService';
 
 const STORAGE_KEY = 'puko_auth_user';
@@ -493,9 +494,9 @@ export const AuthProvider = ({ children }) => {
 
     let storePhone = '';
     try {
-      const savedSettings = localStorage.getItem('puko_settings');
-      if (savedSettings) {
-        storePhone = normalizePhone(JSON.parse(savedSettings)?.phone);
+      const activeSettings = storageService.get('settings') || JSON.parse(localStorage.getItem('puko_settings') || '{}');
+      if (activeSettings?.phone) {
+        storePhone = normalizePhone(activeSettings.phone);
       }
     } catch {
       // ignore
@@ -1098,9 +1099,9 @@ export const AuthProvider = ({ children }) => {
 
     let storePhone = '';
     try {
-      const savedSettings = localStorage.getItem('puko_settings');
-      if (savedSettings) {
-        storePhone = normalizePhone(JSON.parse(savedSettings)?.phone);
+      const activeSettings = storageService.get('settings') || JSON.parse(localStorage.getItem('puko_settings') || '{}');
+      if (activeSettings?.phone) {
+        storePhone = normalizePhone(activeSettings.phone);
       }
     } catch {
       // ignore
@@ -1270,7 +1271,15 @@ export const AuthProvider = ({ children }) => {
       roleBadgeColor: 'bg-emerald-400/20 text-emerald-300 border-emerald-400/30',
     };
 
-    setUsers((prev) => [...prev, newUser]);
+    setUsers((prev) => {
+      const nextList = [...prev, newUser];
+      try {
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(nextList));
+      } catch {
+        // ignore
+      }
+      return nextList;
+    });
 
     // Simpan ke Supabase di background
     try {
@@ -1333,13 +1342,14 @@ export const AuthProvider = ({ children }) => {
       (user && user.role === 'ADMIN' && (id === user.id || id === 'usr-admin'));
 
     let updated = null;
-    setUsers((prev) =>
-      prev.map((item) => {
+    let nextUsersList = [];
+    setUsers((prev) => {
+      nextUsersList = prev.map((item) => {
         const isMatch = item.id === id || (isTargetAdmin && item.role === 'ADMIN');
         if (isMatch) {
           updated = {
             ...item,
-            name: data.name ? data.name.trim() : item.name,
+            name: data.name !== undefined ? data.name.trim() : item.name,
             username: cleanUsername || item.username,
             pin: data.pin !== undefined ? String(data.pin).trim() : item.pin,
             phone: data.phone !== undefined ? String(data.phone).trim() : item.phone,
@@ -1350,8 +1360,14 @@ export const AuthProvider = ({ children }) => {
           return updated;
         }
         return item;
-      })
-    );
+      });
+      try {
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(nextUsersList));
+      } catch {
+        // ignore
+      }
+      return nextUsersList;
+    });
 
     // 1. Sync active session
     const isCurrentLoggedIn = Boolean(
@@ -1379,7 +1395,7 @@ export const AuthProvider = ({ children }) => {
       try {
         const authUpdates = {
           data: {
-            name: data.name ? data.name.trim() : undefined,
+            name: data.name !== undefined ? data.name.trim() : undefined,
             phone: data.phone !== undefined ? String(data.phone).trim() : undefined,
             username: cleanUsername || undefined,
           },
@@ -1398,7 +1414,7 @@ export const AuthProvider = ({ children }) => {
       }
     }
 
-    // 3. Update di public.users Supabase
+    // 3. Update di public.users Supabase & pastikan tersimpan ke database!
     if (updated) {
       try {
         const targetDbId = id;
@@ -1406,16 +1422,64 @@ export const AuthProvider = ({ children }) => {
           ? `${updated.avatar || '🥑'}|email:${updated.email}`
           : (updated.avatar || '🥑');
 
-        const { error: dbError } = await supabase
+        const payload = {
+          name: updated.name,
+          username: updated.username,
+          pin: updated.pin,
+          phone: updated.phone,
+          avatar: dbAvatar,
+        };
+
+        let { data: updatedRows, error: dbError } = await supabase
           .from('users')
-          .update({
-            name: updated.name,
-            username: updated.username,
-            pin: updated.pin,
-            phone: updated.phone,
-            avatar: dbAvatar,
-          })
-          .eq('id', targetDbId);
+          .update(payload)
+          .eq('id', targetDbId)
+          .select();
+
+        // Jika akun Owner dan tidak ada baris yang berubah (misal mismatch ID antara uuid Supabase auth & usr-admin)
+        if (isTargetAdmin && (!updatedRows || updatedRows.length === 0)) {
+          const { data: adminRows } = await supabase
+            .from('users')
+            .update(payload)
+            .eq('id', 'usr-admin')
+            .select();
+
+          if (!adminRows || adminRows.length === 0) {
+            const { data: roleAdminRows } = await supabase
+              .from('users')
+              .update(payload)
+              .eq('role', 'ADMIN')
+              .select();
+
+            if (!roleAdminRows || roleAdminRows.length === 0) {
+              await supabase.from('users').upsert({
+                id: targetDbId,
+                store_id: updated.store_id || DEFAULT_STORE_ID,
+                role: 'ADMIN',
+                ...payload,
+              });
+            }
+          }
+        }
+
+        // 4. Sinkronkan nomor telepon ke stores table & store_settings jika target adalah Owner
+        if (isTargetAdmin && updated.phone) {
+          try {
+            const activeStoreId = storeService.getActiveStoreId(user);
+            await storeService.updateStore(activeStoreId, {
+              phone: updated.phone,
+            });
+
+            if (activeStoreId === DEFAULT_STORE_ID) {
+              await supabase
+                .from('store_settings')
+                .update({ phone: updated.phone })
+                .eq('id', 1);
+            }
+          } catch (stErr) {
+            console.warn('[AuthContext] sync phone to stores error:', stErr);
+          }
+        }
 
         if (dbError) {
           console.warn('[AuthContext] updateUser error di Supabase:', dbError);
@@ -1438,7 +1502,15 @@ export const AuthProvider = ({ children }) => {
       throw new Error('Akun Owner utama tidak dapat dihapus.');
     }
 
-    setUsers((prev) => prev.filter((u) => u.id !== id));
+    setUsers((prev) => {
+      const filtered = prev.filter((u) => u.id !== id);
+      try {
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(filtered));
+      } catch {
+        // ignore
+      }
+      return filtered;
+    });
 
     // Hapus dari Supabase di background
     try {
@@ -1457,6 +1529,11 @@ export const AuthProvider = ({ children }) => {
    */
   const resetUsers = () => {
     setUsers(DEFAULT_USERS);
+    try {
+      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(DEFAULT_USERS));
+    } catch {
+      // ignore
+    }
     return DEFAULT_USERS;
   };
 
