@@ -1575,47 +1575,6 @@ export const TransactionsPage = () => {
                 ))}
               </tbody>
             </table>
-
-            {/* Tabel Tambahan: Total Cup Terpakai */}
-            <table
-              style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                border: '1px solid #475569',
-                backgroundColor: '#ffffff',
-                fontSize: reportFormat === 'mobile' ? '9px' : '10px',
-                lineHeight: '1.5',
-                marginTop: '5px',
-              }}
-            >
-              <tbody>
-                <tr style={{ backgroundColor: '#f8fafc' }}>
-                  <td
-                    style={{
-                      padding: reportFormat === 'mobile' ? '6px 8px' : '7px 10px',
-                      color: '#000000',
-                      fontWeight: '800',
-                      border: '1px solid #475569',
-                    }}
-                  >
-                    Total Cup Terpakai
-                  </td>
-                  <td
-                    style={{
-                      padding: reportFormat === 'mobile' ? '6px 8px' : '7px 10px',
-                      color: '#000000',
-                      fontWeight: '900',
-                      textAlign: 'right',
-                      border: '1px solid #475569',
-                      whiteSpace: 'nowrap',
-                      width: reportFormat === 'mobile' ? '110px' : '180px',
-                    }}
-                  >
-                    {totalDrinkCups} Cup
-                  </td>
-                </tr>
-              </tbody>
-            </table>
           </div>
 
           {/* Tabel Transaksi Penjualan */}
@@ -1958,76 +1917,103 @@ export const TransactionsPage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredExpenses.map((exp, idx) => (
-                    <tr
-                      key={exp.id || idx}
-                      style={{
-                        borderBottom: '1px solid #cbd5e1',
-                        backgroundColor: '#ffffff',
-                      }}
-                    >
-                      <td
+                  {filteredExpenses.map((exp, idx) => {
+                    const expTitle = (
+                      exp.title ||
+                      exp.keterangan ||
+                      exp.notes ||
+                      exp.description ||
+                      (exp.category && exp.category !== 'LAINNYA' ? exp.category : 'Pengeluaran Operasional')
+                    ).trim();
+
+                    const rawRecorder =
+                      exp.loggedBy ||
+                      exp.logged_by ||
+                      exp.recordedBy ||
+                      exp.recorded_by ||
+                      exp.user ||
+                      exp.author ||
+                      exp.cashierName ||
+                      '';
+                    const expRecorder =
+                      rawRecorder &&
+                      (rawRecorder.toLowerCase().includes('admin') ||
+                        rawRecorder.toLowerCase().includes('owner') ||
+                        rawRecorder.toLowerCase().includes('supervisor'))
+                        ? 'Admin'
+                        : rawRecorder || 'Kasir';
+
+                    return (
+                      <tr
+                        key={exp.id || idx}
                         style={{
-                          padding: reportFormat === 'mobile' ? '4px 2px' : '5px',
-                          textAlign: 'center',
-                          color: '#000000',
-                          fontWeight: '600',
-                          border: '1px solid #cbd5e1',
+                          borderBottom: '1px solid #cbd5e1',
+                          backgroundColor: '#ffffff',
                         }}
                       >
-                        {idx + 1}
-                      </td>
-                      <td
-                        style={{
-                          padding: reportFormat === 'mobile' ? '4px 3px' : '5px',
-                          color: '#000000',
-                          fontWeight: '500',
-                          border: '1px solid #cbd5e1',
-                        }}
-                      >
-                        {reportFormat === 'mobile'
-                          ? formatTime(exp.timestamp)
-                          : formatDate(exp.timestamp)}
-                      </td>
-                      <td
-                        style={{
-                          padding: reportFormat === 'mobile' ? '4px 4px' : '5px',
-                          color: '#000000',
-                          border: '1px solid #cbd5e1',
-                        }}
-                      >
-                        <div style={{ fontWeight: '700', color: '#000000' }}>{exp.category || exp.keterangan || 'Pengeluaran Operasional'}</div>
-                        {reportFormat === 'mobile' && exp.user && (
-                          <div
-                            style={{
-                              fontSize: '7.5px',
-                              color: '#000000',
-                              fontWeight: '500',
-                            }}
-                          >
-                            Oleh: {exp.user}
-                          </div>
-                        )}
-                      </td>
-                      {reportFormat === 'a4' && (
-                        <td style={{ padding: '5px', color: '#000000', fontWeight: '500', border: '1px solid #cbd5e1' }}>
-                          {exp.user || 'Kasir'}
+                        <td
+                          style={{
+                            padding: reportFormat === 'mobile' ? '4px 2px' : '5px',
+                            textAlign: 'center',
+                            color: '#000000',
+                            fontWeight: '600',
+                            border: '1px solid #cbd5e1',
+                          }}
+                        >
+                          {idx + 1}
                         </td>
-                      )}
-                      <td
-                        style={{
-                          padding: reportFormat === 'mobile' ? '4px 4px' : '5px',
-                          textAlign: 'right',
-                          color: '#000000',
-                          fontWeight: '800',
-                          border: '1px solid #cbd5e1',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        - {formatIDR(exp.amount)}
-                      </td>
-                    </tr>
-                  ))}
+                        <td
+                          style={{
+                            padding: reportFormat === 'mobile' ? '4px 3px' : '5px',
+                            color: '#000000',
+                            fontWeight: '500',
+                            border: '1px solid #cbd5e1',
+                          }}
+                        >
+                          {reportFormat === 'mobile'
+                            ? formatTime(exp.timestamp)
+                            : formatDate(exp.timestamp)}
+                        </td>
+                        <td
+                          style={{
+                            padding: reportFormat === 'mobile' ? '4px 4px' : '5px',
+                            color: '#000000',
+                            border: '1px solid #cbd5e1',
+                          }}
+                        >
+                          <div style={{ fontWeight: '700', color: '#000000' }}>{expTitle}</div>
+                          {reportFormat === 'mobile' && (
+                            <div
+                              style={{
+                                fontSize: '7.5px',
+                                color: '#000000',
+                                fontWeight: '600',
+                              }}
+                            >
+                              Oleh: {expRecorder}
+                            </div>
+                          )}
+                        </td>
+                        {reportFormat === 'a4' && (
+                          <td style={{ padding: '5px', color: '#000000', fontWeight: '600', border: '1px solid #cbd5e1' }}>
+                            {expRecorder}
+                          </td>
+                        )}
+                        <td
+                          style={{
+                            padding: reportFormat === 'mobile' ? '4px 4px' : '5px',
+                            textAlign: 'right',
+                            color: '#000000',
+                            fontWeight: '800',
+                            border: '1px solid #cbd5e1',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          - {formatIDR(exp.amount)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
                 <tfoot>
                   <tr

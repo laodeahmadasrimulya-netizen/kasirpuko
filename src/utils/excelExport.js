@@ -476,12 +476,17 @@ export const exportTransactionsToExcel = async (
     expStartRow = ringkasanData.length;
     expCount = expenses.length;
     expenses.forEach((exp, idx) => {
+      const expTitle = (exp.title || exp.note || exp.description || exp.keterangan || (exp.category && exp.category !== 'LAINNYA' ? exp.category : 'Pengeluaran') || '-').trim();
+      const rawRec = exp.loggedBy || exp.logged_by || exp.recordedBy || exp.recorded_by || exp.user || exp.author || exp.cashierName || '';
+      const expRec = (rawRec && (rawRec.toLowerCase().includes('admin') || rawRec.toLowerCase().includes('owner') || rawRec.toLowerCase().includes('supervisor')))
+        ? 'Admin'
+        : (rawRec || 'Kasir');
       ringkasanData.push([
         idx + 1,
         formatDate(exp.timestamp || exp.date),
         exp.category || 'Operasional',
-        exp.note || exp.description || '-',
-        exp.recordedBy || exp.cashierName || '-',
+        expTitle,
+        expRec,
         Number(exp.amount) || 0,
       ]);
     });
@@ -923,12 +928,17 @@ export const exportTransactionsToExcel = async (
 
     const expSheetStartRow = 4;
     expenses.forEach((exp, idx) => {
+      const expTitle = (exp.title || exp.note || exp.description || exp.keterangan || (exp.category && exp.category !== 'LAINNYA' ? exp.category : 'Pengeluaran') || '-').trim();
+      const rawRec = exp.loggedBy || exp.logged_by || exp.recordedBy || exp.recorded_by || exp.user || exp.author || exp.cashierName || '';
+      const expRec = (rawRec && (rawRec.toLowerCase().includes('admin') || rawRec.toLowerCase().includes('owner') || rawRec.toLowerCase().includes('supervisor')))
+        ? 'Admin'
+        : (rawRec || 'Kasir');
       expData.push([
         idx + 1,
         formatDate(exp.timestamp || exp.date),
         exp.category || 'Operasional',
-        exp.note || exp.description || '-',
-        exp.recordedBy || exp.cashierName || '-',
+        expTitle,
+        expRec,
         Number(exp.amount) || 0,
       ]);
     });

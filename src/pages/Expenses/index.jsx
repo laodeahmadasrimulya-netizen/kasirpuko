@@ -71,6 +71,15 @@ export const ExpensesPage = () => {
 
     setIsSubmitting(true);
     try {
+      const isAdmin =
+        user?.role === 'ADMIN' ||
+        user?.role === 'admin' ||
+        user?.role === 'OWNER' ||
+        user?.role === 'owner' ||
+        user?.id === 'usr-admin' ||
+        user?.name?.toLowerCase().includes('admin') ||
+        user?.name?.toLowerCase().includes('owner');
+
       const payload = {
         title: cleanTitle,
         amount: cleanAmount,
@@ -78,7 +87,7 @@ export const ExpensesPage = () => {
         paymentSource: 'KAS_KASIR',
         notes: '',
         timestamp: new Date().toISOString(), // Hanya untuk hari saat ini (tidak bisa hari lampau)
-        loggedBy: user?.role === 'ADMIN' ? 'Admin' : 'Kasir',
+        loggedBy: isAdmin ? 'Admin' : 'Kasir',
       };
 
       await addExpense(payload);
@@ -101,7 +110,7 @@ export const ExpensesPage = () => {
   // Helper to determine role label: "Kasir" or "Admin"
   const getRoleLabel = (loggedBy) => {
     const str = (loggedBy || '').toLowerCase();
-    if (str.includes('admin')) {
+    if (str.includes('admin') || str.includes('owner') || str.includes('supervisor')) {
       return 'Admin';
     }
     return 'Kasir';
