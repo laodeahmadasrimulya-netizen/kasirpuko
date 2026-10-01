@@ -122,9 +122,11 @@ export const Topbar = () => {
                   <p className="text-xs font-black text-slate-800 truncate">
                     {user?.name || (user?.role === 'ADMIN' ? 'Admin' : 'Kasir 01')}
                   </p>
-                  <p className="text-[10px] font-semibold text-slate-400 truncate">
-                    {user?.email || (user?.role === 'ADMIN' ? 'Akun Administrator' : 'Akun Kasir Outlet')}
-                  </p>
+                  {user?.role === 'ADMIN' && (
+                    <p className="text-[10px] font-semibold text-slate-400 truncate">
+                      {user?.email || 'Akun Administrator'}
+                    </p>
+                  )}
                 </div>
               </div>
 
