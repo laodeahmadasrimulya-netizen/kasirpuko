@@ -6,6 +6,16 @@ export const DEFAULT_STORE_ID = 'store_default';
 export const DEMO_STORE_ID = 'store_demo_sandbox';
 const ACTIVE_STORE_KEY = 'puko_active_store_id';
 
+export const isPrimaryOwnerEmail = (email) => {
+  if (!email) return false;
+  const clean = String(email).trim().toLowerCase();
+  return (
+    clean === 'alpukatkocokpuko@gmail.com' ||
+    clean === 'asrial687@gmail.com' ||
+    clean === 'laodeahmadasrimulya@gmail.com'
+  );
+};
+
 export const storeService = {
   /**
    * Cek apakah storeId adalah toko demo
@@ -27,13 +37,11 @@ export const storeService = {
    */
   getActiveStoreId(user = null) {
     if (user?.isDemo) return DEMO_STORE_ID;
-    if (user?.storeId) return user.storeId;
-    if (user?.store_id) return user.store_id;
-
-    // Jika user admin lama PUKO
-    if (user?.id === 'usr-admin' || user?.email?.toLowerCase() === 'alpukatkocokpuko@gmail.com') {
+    if (user?.id === 'usr-admin' || isPrimaryOwnerEmail(user?.email)) {
       return DEFAULT_STORE_ID;
     }
+    if (user?.storeId) return user.storeId;
+    if (user?.store_id) return user.store_id;
 
     try {
       const saved = localStorage.getItem(ACTIVE_STORE_KEY);
@@ -101,7 +109,7 @@ export const storeService = {
    * Mengambil atau otomatis membuat toko untuk Owner yang login
    */
   async getOrCreateStoreForOwner(ownerId, ownerEmail, storeName) {
-    if (ownerId === 'usr-admin' || ownerEmail?.toLowerCase() === 'alpukatkocokpuko@gmail.com') {
+    if (ownerId === 'usr-admin' || isPrimaryOwnerEmail(ownerEmail)) {
       this.setActiveStoreId(DEFAULT_STORE_ID);
       return await this.getStore(DEFAULT_STORE_ID);
     }
@@ -110,7 +118,7 @@ export const storeService = {
 
     // 1. Cek di tabel stores Supabase
     try {
-      let query = supabase.from('stores').select('*');
+      let query = supabase.from('stores').select('*').order('created_at', { ascending: false });
       if (ownerId && cleanEmail) {
         query = query.or(`owner_id.eq.${ownerId},owner_email.eq.${cleanEmail}`);
       } else if (cleanEmail) {
@@ -118,10 +126,11 @@ export const storeService = {
       } else if (ownerId) {
         query = query.eq('owner_id', ownerId);
       }
-      const { data, error } = await query.maybeSingle();
-      if (!error && data) {
-        this.setActiveStoreId(data.id);
-        return data;
+      const { data, error } = await query;
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const primaryStore = data[0];
+        this.setActiveStoreId(primaryStore.id);
+        return primaryStore;
       }
     } catch (err) {
       console.warn('[storeService] getOrCreateStore Supabase notice:', err);

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { storeService, DEFAULT_STORE_ID, DEMO_STORE_ID } from '../services/storeService';
+import { storeService, DEFAULT_STORE_ID, DEMO_STORE_ID, isPrimaryOwnerEmail } from '../services/storeService';
 import { storageService } from '../services/storageService';
 import { demoService } from '../services/demoService';
 
@@ -151,7 +151,7 @@ export const AuthProvider = ({ children }) => {
               avatar = parts[0] || '🥑';
               email = parts[1] || email;
             }
-            const sId = u.store_id || (u.id === 'usr-admin' || email === OWNER_EMAIL ? DEFAULT_STORE_ID : DEFAULT_STORE_ID);
+            const sId = u.store_id || (u.id === 'usr-admin' || isPrimaryOwnerEmail(email) ? DEFAULT_STORE_ID : DEFAULT_STORE_ID);
             return {
               id: u.id,
               store_id: sId,
@@ -170,7 +170,19 @@ export const AuthProvider = ({ children }) => {
                   : 'bg-emerald-400/20 text-emerald-300 border-emerald-400/30',
             };
           });
-          setUsers(mapped);
+
+          setUsers((prev) => {
+            const hasAdminInDb = mapped.some((m) => m.role === 'ADMIN');
+            let next = mapped;
+            if (!hasAdminInDb) {
+              const currentAdmin = prev.find((p) => p.role === 'ADMIN') || DEFAULT_USERS[0];
+              next = [currentAdmin, ...mapped];
+            }
+            try {
+              localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(next));
+            } catch {}
+            return next;
+          });
           setUser((curr) => {
             if (!curr) return curr;
             const fresh = mapped.find(
@@ -209,7 +221,8 @@ export const AuthProvider = ({ children }) => {
 
     const isPrimaryOwner =
       authUser.id === 'usr-admin' ||
-      authUser.email?.toLowerCase() === OWNER_EMAIL.toLowerCase();
+      authUser.email?.toLowerCase() === OWNER_EMAIL.toLowerCase() ||
+      isPrimaryOwnerEmail(authUser.email);
 
     let storeId = DEFAULT_STORE_ID;
     if (!isPrimaryOwner) {
@@ -1182,15 +1195,28 @@ export const AuthProvider = ({ children }) => {
    * Cashiers and users belonging specifically to the active store
    */
   const activeStoreId = storeService.getActiveStoreId(user);
-  const visibleUsers = users.filter((u) => {
+  let visibleUsers = users.filter((u) => {
     const uStore =
       u.storeId ||
       u.store_id ||
-      (u.id === 'usr-admin' || (u.role === 'ADMIN' && u.email?.toLowerCase() === OWNER_EMAIL.toLowerCase())
+      (u.id === 'usr-admin' || (u.role === 'ADMIN' && (isPrimaryOwnerEmail(u.email) || u.email?.toLowerCase() === OWNER_EMAIL.toLowerCase()))
         ? DEFAULT_STORE_ID
         : DEFAULT_STORE_ID);
     return uStore === activeStoreId;
   });
+
+  // Pastikan akun Owner aktif selalu muncul di daftar pengguna (visibleUsers) tokonya
+  const hasOwner = visibleUsers.some((u) => u.role === 'ADMIN');
+  if (!hasOwner) {
+    if (user && user.role === 'ADMIN') {
+      visibleUsers = [{ ...user, storeId: activeStoreId, store_id: activeStoreId }, ...visibleUsers];
+    } else {
+      const adminCandidate = users.find((u) => u.role === 'ADMIN') || DEFAULT_USERS[0];
+      if (adminCandidate) {
+        visibleUsers = [{ ...adminCandidate, storeId: activeStoreId, store_id: activeStoreId }, ...visibleUsers];
+      }
+    }
+  }
 
   /**
    * One-click Quick Login (Admin or Kasir of current store)
