@@ -33,9 +33,9 @@ export const DEFAULT_USERS = [
     username: 'admin',
     email: OWNER_EMAIL,
     pin: '1234',
-    name: 'Owner',
+    name: 'Admin',
     role: 'ADMIN',
-    phone: '085652103647',
+    phone: '085343708206',
     avatar: '🥑',
     roleLabel: 'Admin / Owner',
     roleBadgeColor: 'bg-amber-400/20 text-amber-300 border-amber-400/30',
@@ -64,6 +64,18 @@ export const normalizePhone = (num) => {
   return clean;
 };
 
+export const isLegacyPlaceholderName = (name) => {
+  if (!name || typeof name !== 'string') return true;
+  const lower = name.trim().toLowerCase();
+  return (
+    lower === 'owner / supervisor' ||
+    lower === 'puko alpukat kocok' ||
+    lower === 'puko' ||
+    lower === 'owner' ||
+    lower === 'pengguna'
+  );
+};
+
 export const USERS = DEFAULT_USERS;
 
 const AuthContext = createContext(null);
@@ -79,11 +91,11 @@ export const AuthProvider = ({ children }) => {
           return parsed.map((u) => {
             let updated = u;
             if (updated.id === 'usr-admin') {
-              if (updated.name === 'Owner / Supervisor' || !updated.name) {
-                updated = { ...updated, name: 'Owner' };
+              if (isLegacyPlaceholderName(updated.name)) {
+                updated = { ...updated, name: 'Admin' };
               }
               if (!updated.phone) {
-                updated = { ...updated, phone: '085652103647' };
+                updated = { ...updated, phone: '085343708206' };
               }
               if (!updated.email) {
                 updated = { ...updated, email: OWNER_EMAIL };
@@ -111,14 +123,14 @@ export const AuthProvider = ({ children }) => {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         let parsed = JSON.parse(saved);
-        if (parsed?.id === 'usr-admin') {
-          if (parsed?.name === 'Owner / Supervisor' || !parsed?.name) {
-            parsed = { ...parsed, name: 'Owner' };
+        if (parsed?.id === 'usr-admin' || parsed?.role === 'ADMIN') {
+          if (isLegacyPlaceholderName(parsed?.name)) {
+            parsed = { ...parsed, name: 'Admin' };
           }
           if (!parsed?.phone) {
-            parsed = { ...parsed, phone: '085652103647' };
+            parsed = { ...parsed, phone: '085343708206' };
           }
-          if (!parsed?.email) {
+          if (!parsed?.email && parsed?.id === 'usr-admin') {
             parsed = { ...parsed, email: OWNER_EMAIL };
           }
         }
@@ -196,9 +208,12 @@ export const AuthProvider = ({ children }) => {
                 (curr.email && m.email && curr.email.toLowerCase() === m.email.toLowerCase())
             );
             if (fresh) {
+              const freshName = isLegacyPlaceholderName(fresh.name)
+                ? (isLegacyPlaceholderName(curr.name) ? 'Admin' : curr.name)
+                : fresh.name;
               const merged = {
                 ...curr,
-                name: fresh.name || curr.name,
+                name: freshName,
                 phone: fresh.phone || curr.phone,
                 username: fresh.username || curr.username,
                 storeId: fresh.store_id || curr.storeId,
@@ -249,19 +264,40 @@ export const AuthProvider = ({ children }) => {
       if (savedUserStr) savedLocalUser = JSON.parse(savedUserStr);
     } catch {}
 
-    const resolvedName =
-      authUser.user_metadata?.name ||
-      matched?.name ||
-      (savedLocalUser?.id === authUser.id && savedLocalUser?.name && savedLocalUser.name !== 'Owner / Supervisor' ? savedLocalUser.name : '') ||
-      (isPrimaryOwner ? 'Owner' : authUser.email?.split('@')[0] || 'Pengguna');
+    // Priority:
+    // 1. Explicitly saved custom name in localStorage (active on this device)
+    // 2. Custom name from users list / public.users (matched.name)
+    // 3. Supabase Auth metadata name (only if NOT a legacy placeholder like 'puko alpukat kocok')
+    // 4. Default fallback: 'Admin'
+    let resolvedName = null;
+    if (savedLocalUser?.name && !isLegacyPlaceholderName(savedLocalUser.name)) {
+      resolvedName = savedLocalUser.name;
+    } else if (matched?.name && !isLegacyPlaceholderName(matched.name)) {
+      resolvedName = matched.name;
+    } else if (authUser.user_metadata?.name && !isLegacyPlaceholderName(authUser.user_metadata.name)) {
+      resolvedName = authUser.user_metadata.name;
+    } else {
+      resolvedName = (savedLocalUser?.name && !isLegacyPlaceholderName(savedLocalUser.name))
+        ? savedLocalUser.name
+        : (isPrimaryOwner ? 'Admin' : authUser.email?.split('@')[0] || 'Admin');
+    }
+
+    // Auto-update user_metadata di Supabase Auth jika masih menyimpan nama legacy 'puko alpukat kocok'
+    if (authUser.user_metadata?.name !== resolvedName) {
+      try {
+        supabase.auth.updateUser({
+          data: { name: resolvedName }
+        }).catch(() => {});
+      } catch {}
+    }
 
     const activeUser = {
       id: authUser.id,
       email: authUser.email,
       name: resolvedName,
       role: authUser.user_metadata?.role || matched?.role || 'ADMIN',
-      username: matched?.username || authUser.email?.split('@')[0],
-      phone: matched?.phone || authUser.user_metadata?.phone || '',
+      username: matched?.username || authUser.email?.split('@')[0] || 'admin',
+      phone: matched?.phone || authUser.user_metadata?.phone || (isPrimaryOwner ? '085343708206' : ''),
       avatar: matched?.avatar || '🥑',
       storeId: storeId,
       store_id: storeId,
@@ -269,6 +305,9 @@ export const AuthProvider = ({ children }) => {
       roleBadgeColor: 'bg-amber-400/20 text-amber-300 border-amber-400/30',
     };
     setUser(activeUser);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(activeUser));
+    } catch {}
 
     // Sync to public.users Supabase table so all devices and sessions recognize this Owner
     try {
@@ -283,6 +322,12 @@ export const AuthProvider = ({ children }) => {
       }).then(({ error }) => {
         if (error) console.warn('[syncSessionUser] upsert user error:', error);
       });
+      if (isPrimaryOwner && authUser.id !== 'usr-admin') {
+        supabase.from('users').update({
+          name: activeUser.name,
+          phone: activeUser.phone,
+        }).eq('id', 'usr-admin').then(() => {});
+      }
     } catch {}
 
     // Ensure the active user exists in users state
@@ -409,18 +454,32 @@ export const AuthProvider = ({ children }) => {
           }
           storeService.setActiveStoreId(storeId);
 
-          const resolvedName =
-            data.user.user_metadata?.name ||
-            matched?.name ||
-            (isPrimaryOwner ? 'Owner' : data.user.email?.split('@')[0] || 'Pengguna');
+          let resolvedName = null;
+          if (matched?.name && !isLegacyPlaceholderName(matched.name)) {
+            resolvedName = matched.name;
+          } else if (data.user.user_metadata?.name && !isLegacyPlaceholderName(data.user.user_metadata.name)) {
+            resolvedName = data.user.user_metadata.name;
+          } else {
+            resolvedName = matched?.name && !isLegacyPlaceholderName(matched.name)
+              ? matched.name
+              : (isPrimaryOwner ? 'Admin' : data.user.email?.split('@')[0] || 'Admin');
+          }
+
+          if (data.user.user_metadata?.name !== resolvedName) {
+            try {
+              supabase.auth.updateUser({
+                data: { name: resolvedName }
+              }).catch(() => {});
+            } catch {}
+          }
 
           const activeUser = {
             id: data.user.id,
             email: data.user.email,
             name: resolvedName,
             role: data.user.user_metadata?.role || matched?.role || 'ADMIN',
-            username: matched?.username || data.user.email?.split('@')[0],
-            phone: matched?.phone || data.user.user_metadata?.phone || '',
+            username: matched?.username || data.user.email?.split('@')[0] || 'admin',
+            phone: matched?.phone || data.user.user_metadata?.phone || (isPrimaryOwner ? '085343708206' : ''),
             avatar: matched?.avatar || '🥑',
             storeId: storeId,
             store_id: storeId,
@@ -441,6 +500,12 @@ export const AuthProvider = ({ children }) => {
               avatar: activeUser.avatar || '🥑',
               pin: trimmedSecret.slice(0, 8) || '1234',
             });
+            if (isPrimaryOwner && data.user.id !== 'usr-admin') {
+              await supabase.from('users').update({
+                name: activeUser.name,
+                phone: activeUser.phone,
+              }).eq('id', 'usr-admin');
+            }
           } catch (e) {
             console.warn('[login] upsert user notice:', e);
           }
@@ -1446,7 +1511,13 @@ export const AuthProvider = ({ children }) => {
     });
 
     // 1. Sync active session jika user yang sedang login yang diedit
-    const isCurrentLoggedIn = Boolean(user && user.id === id);
+    const isCurrentLoggedIn = Boolean(
+      user && (
+        user.id === id ||
+        (user.email && data.email && user.email.toLowerCase() === data.email.toLowerCase()) ||
+        (user.role === 'ADMIN' && isTargetAdmin)
+      )
+    );
 
     if (isCurrentLoggedIn && updated) {
       const activeUpdate = {
@@ -1464,8 +1535,8 @@ export const AuthProvider = ({ children }) => {
       }
     }
 
-    // 2. Jika target adalah akun yang sedang login, update juga metadata di Supabase Auth!
-    if (isCurrentLoggedIn) {
+    // 2. Jika target adalah akun yang sedang login / Admin, update juga metadata di Supabase Auth!
+    if (isCurrentLoggedIn || isTargetAdmin) {
       try {
         const authUpdates = {
           data: {
@@ -1522,6 +1593,13 @@ export const AuthProvider = ({ children }) => {
               ...payload,
             });
           }
+        }
+
+        // Jika target adalah usr-admin dan active user ID berbeda (misal UUID Supabase), update keduanya
+        if (id === 'usr-admin' && user?.id && user.id !== 'usr-admin') {
+          await supabase.from('users').update(payload).eq('id', user.id);
+        } else if (user?.id === 'usr-admin' && id !== 'usr-admin') {
+          await supabase.from('users').update(payload).eq('id', 'usr-admin');
         }
 
         // 4. Sinkronkan nomor telepon ke stores table & store_settings jika target adalah Owner
