@@ -336,68 +336,68 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
                 {settings?.storeName || 'PUKO'}
               </h2>
               {settings?.tagline ? (
-                <p className="text-[11px] font-bold text-slate-700 font-sans tracking-tight mt-0.5">
+                <p className="text-[11px] font-bold text-black font-sans tracking-tight mt-0.5">
                   {settings.tagline}
                 </p>
               ) : null}
               {settings?.branch && (
-                <p className="text-[10px] text-slate-500 mt-1">
+                <p className="text-[10px] text-black font-medium mt-1">
                   {settings.branch}
                 </p>
               )}
               {settings?.address && (
-                <p className="text-[10px] text-slate-500 leading-tight">
+                <p className="text-[10px] text-black font-medium leading-tight">
                   {settings.address}
                 </p>
               )}
               {settings?.phone && (
-                <p className="text-[10px] text-slate-500">
+                <p className="text-[10px] text-black font-medium">
                   {settings.phone}
                 </p>
               )}
             </div>
 
             {/* Separator Dashed Line */}
-            <div className="border-t border-dashed border-slate-400 my-1" />
+            <div className="border-t border-dashed border-black my-1" />
 
             {/* Meta Info: Tanggal & Nomor Transaksi */}
             <div className="space-y-1 text-[11px]">
               <div className="flex justify-between">
-                <span className="text-slate-500">Tanggal:</span>
-                <span className="font-semibold">{formatDate(transaction.timestamp)}</span>
+                <span className="text-black font-medium">Tanggal:</span>
+                <span className="font-bold text-black">{formatDate(transaction.timestamp)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">No. Transaksi:</span>
-                <span className="font-bold text-slate-900">{transaction.id}</span>
+                <span className="text-black font-medium">No. Transaksi:</span>
+                <span className="font-extrabold text-black">{transaction.id}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Kasir:</span>
-                <span className="font-semibold text-slate-800">
+                <span className="text-black font-medium">Kasir:</span>
+                <span className="font-bold text-black">
                   {transaction.cashierName
-                    ? (transaction.cashierName === 'Owner / Supervisor' ? (user?.name || 'Owner') : transaction.cashierName)
-                    : (user?.role === 'ADMIN' ? (user?.name || 'Owner') : (user?.name || settings?.cashierName || 'Kasir 01'))}
+                    ? (transaction.cashierName === 'Owner / Supervisor' ? (user?.name || 'Admin') : transaction.cashierName)
+                    : (user?.role === 'ADMIN' ? (user?.name || 'Admin') : (user?.name || settings?.cashierName || 'Kasir 01'))}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Pelanggan:</span>
-                <span>
+                <span className="text-black font-medium">Pelanggan:</span>
+                <span className="font-bold text-black">
                   {transaction.customerName?.trim() &&
                   transaction.customerName.trim() !== 'Pelanggan Umum' &&
                   transaction.customerName.trim() !== 'Pelanggan Walk-in' &&
                   transaction.customerName.trim() !== 'Umum' &&
                   transaction.customerName.trim() !== '-'
                     ? transaction.customerName.trim()
-                    : ''}
+                    : 'Umum'}
                 </span>
               </div>
             </div>
 
             {/* Separator Dashed Line */}
-            <div className="border-t border-dashed border-slate-400 my-1" />
+            <div className="border-t border-dashed border-black my-1" />
 
             {/* Daftar Produk, Jumlah & Harga */}
             <div className="space-y-2.5">
-              <div className="flex justify-between text-[10px] uppercase font-bold text-slate-500">
+              <div className="flex justify-between text-[10px] uppercase font-extrabold text-black">
                 <span>Menu / Qty</span>
                 <span>Harga</span>
               </div>
@@ -407,19 +407,19 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
                 const itemPrice = item.harga || item.price;
                 return (
                   <div key={idx} className="space-y-0.5">
-                    <div className="font-bold text-slate-900 leading-snug">
+                    <div className="font-bold text-black leading-snug">
                       {itemName}
                     </div>
-                    <div className="flex justify-between text-[11px] text-slate-600">
-                      <span>
+                    <div className="flex justify-between text-[11px] text-black">
+                      <span className="font-semibold text-black">
                         {item.qty} x {formatIDR(itemPrice)}
                       </span>
-                      <span className="font-bold text-slate-900">
+                      <span className="font-extrabold text-black">
                         {formatIDR(item.subtotal)}
                       </span>
                     </div>
                     {item.notes && (
-                      <p className="text-[10px] text-slate-500 italic pl-1">
+                      <p className="text-[10px] text-black font-medium italic pl-1">
                         * {item.notes}
                       </p>
                     )}
@@ -429,57 +429,57 @@ export const ReceiptModal = ({ isOpen, onClose, transaction }) => {
             </div>
 
             {/* Separator Dashed Line */}
-            <div className="border-t border-dashed border-slate-400 my-1" />
+            <div className="border-t border-dashed border-black my-1" />
 
             {/* Perhitungan Total, Bayar, Kembalian */}
             <div className="space-y-1.5 text-[11px]">
-              <div className="flex justify-between text-slate-600">
+              <div className="flex justify-between text-black font-medium">
                 <span>Subtotal:</span>
-                <span>{formatIDR(transaction.subtotal)}</span>
+                <span className="font-bold text-black">{formatIDR(transaction.subtotal)}</span>
               </div>
 
               {transaction.discount > 0 && (
-                <div className="flex justify-between text-rose-600 font-semibold">
+                <div className="flex justify-between text-rose-600 font-bold">
                   <span>Diskon:</span>
                   <span>-{formatIDR(transaction.discount)}</span>
                 </div>
               )}
 
-              <div className="flex justify-between text-sm font-black text-slate-950 pt-1 border-t border-dotted border-slate-300">
+              <div className="flex justify-between text-base font-black text-black pt-1 border-t-2 border-black">
                 <span>TOTAL:</span>
                 <span>{formatIDR(transaction.total)}</span>
               </div>
 
-              <div className="flex justify-between pt-1 text-slate-700">
+              <div className="flex justify-between pt-1 text-black font-medium">
                 <span>Metode Bayar:</span>
-                <span className="font-bold">{transaction.paymentMethod}</span>
+                <span className="font-bold text-black">{transaction.paymentMethod}</span>
               </div>
 
-              <div className="flex justify-between text-slate-700">
+              <div className="flex justify-between text-black font-medium">
                 <span>Bayar:</span>
-                <span className="font-semibold">{formatIDR(transaction.amountPaid)}</span>
+                <span className="font-bold text-black">{formatIDR(transaction.amountPaid)}</span>
               </div>
 
-              <div className="flex justify-between font-bold text-slate-950 pt-0.5">
+              <div className="flex justify-between font-extrabold text-black pt-0.5">
                 <span>Kembalian:</span>
-                <span>{formatIDR(transaction.change)}</span>
+                <span className="font-black text-black">{formatIDR(transaction.change)}</span>
               </div>
             </div>
 
             {/* Separator Dashed Line */}
-            <div className="border-t border-dashed border-slate-400 my-1" />
+            <div className="border-t border-dashed border-black my-1" />
 
             {/* Footer Struk */}
-            <div className="text-center text-[10px] text-slate-500 pt-1 leading-relaxed whitespace-pre-line font-sans">
+            <div className="text-center text-[10px] text-black pt-1 leading-relaxed whitespace-pre-line font-sans">
               {settings?.receiptFooter ? (
-                <p className="font-medium text-slate-600">{settings.receiptFooter}</p>
+                <p className="font-semibold text-black">{settings.receiptFooter}</p>
               ) : (
                 <>
-                  <p className="font-bold text-slate-700">Terima kasih telah berbelanja di PUKO!</p>
-                  <p className="mt-1 font-medium">
+                  <p className="font-bold text-black">Terima kasih telah berbelanja di PUKO!</p>
+                  <p className="mt-1 font-medium text-black">
                     Dikocok dulu, Baru diminum "Spesialis Alpukat Kocok Tanpa Serat dan Rasa Pahit yang Menggangu"
                   </p>
-                  <p className="mt-1">Follow kami di IG @Puko.id</p>
+                  <p className="mt-1 font-semibold text-black">Follow kami di IG @Puko.id</p>
                 </>
               )}
             </div>
