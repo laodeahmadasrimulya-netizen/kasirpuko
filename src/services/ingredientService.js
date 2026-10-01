@@ -222,16 +222,29 @@ export const ingredientService = {
           }
         }
       }
-      if (!error && Array.isArray(data) && data.length > 0) {
+
+      if (!error && Array.isArray(data)) {
+        // Mulai dari bahan baku default (Alpukat, Susu UHT, SKM)
+        const result = {};
+        Object.keys(DEFAULT_INGREDIENTS).forEach((k) => {
+          result[k] = { ...DEFAULT_INGREDIENTS[k] };
+        });
+
+        // Pertahankan nilai lokal bahan dasar jika belum ada di database
         const current = this.getAll();
-        const updated = { ...current };
+        ['alpukat', 'susuUht', 'skm'].forEach((baseKey) => {
+          if (current[baseKey]) {
+            result[baseKey] = { ...result[baseKey], ...current[baseKey] };
+          }
+        });
+
+        // Masukkan data baris yang aktif dari Supabase (termasuk custom ingredients yang belum dihapus)
         data.forEach((row) => {
           const key = row.id.replace(`${storeId}_`, '');
-          updated[key] = {
-            ...(updated[key] || {}),
+          result[key] = {
             id: key,
             name: row.name,
-            category: row.category,
+            category: row.category || 'Bahan Tambahan',
             unit: row.unit,
             baseUnit: row.base_unit || row.unit,
             initialStock: Number(row.initial_stock || row.max_stock || 0),
@@ -241,10 +254,13 @@ export const ingredientService = {
             portionPerCup: Number(row.portion_per_cup || 0),
             icon: row.icon || '📦',
             color: row.color || 'emerald',
+            isCustom: !['alpukat', 'susuUht', 'skm'].includes(key),
+            isDefault: ['alpukat', 'susuUht', 'skm'].includes(key),
           };
         });
-        storageService.set(storageKey, updated);
-        return updated;
+
+        storageService.set(storageKey, result);
+        return result;
       }
     } catch (err) {
       console.warn('[ingredientService] fetchFromSupabase error:', err);
@@ -402,14 +418,33 @@ export const ingredientService = {
   /**
    * Delete custom raw ingredient
    */
-  deleteIngredient(ingredientId) {
+  async deleteIngredient(ingredientId) {
     const current = this.getAll();
     if (!current[ingredientId]) return current;
 
     const updated = { ...current };
     delete updated[ingredientId];
 
-    this.save(updated);
+    const storageKey = getStorageKey();
+    storageService.set(storageKey, updated);
+
+    // Hapus permanen di Supabase agar sinkron ke semua perangkat (Web, Laptop, HP lain)
+    const storeId = storeService.getActiveStoreId();
+    if (!storeService.isDemoStore(storeId)) {
+      const candidateIds = [
+        String(ingredientId),
+        `${storeId}_${ingredientId}`,
+      ];
+      try {
+        await supabase
+          .from('ingredients')
+          .delete()
+          .in('id', candidateIds);
+      } catch (err) {
+        console.warn('[ingredientService] deleteIngredient error di Supabase:', err);
+      }
+    }
+
     return updated;
   },
 
@@ -437,8 +472,33 @@ export const ingredientService = {
   /**
    * Reset to default seed
    */
-  resetToDefault() {
-    this.save(DEFAULT_INGREDIENTS);
+  async resetToDefault() {
+    const storeId = storeService.getActiveStoreId();
+    const storageKey = getStorageKey();
+    storageService.set(storageKey, DEFAULT_INGREDIENTS);
+
+    if (!storeService.isDemoStore(storeId)) {
+      try {
+        const coreIds = [
+          'alpukat',
+          'susuUht',
+          'skm',
+          `${storeId}_alpukat`,
+          `${storeId}_susuUht`,
+          `${storeId}_skm`,
+        ];
+        // Hapus custom ingredients dari Supabase
+        await supabase
+          .from('ingredients')
+          .delete()
+          .eq('store_id', storeId)
+          .not('id', 'in', `(${coreIds.join(',')})`);
+      } catch (err) {
+        console.warn('[ingredientService] resetToDefault Supabase error:', err);
+      }
+    }
+
+    syncToSupabase(DEFAULT_INGREDIENTS);
     return DEFAULT_INGREDIENTS;
   },
 

@@ -363,10 +363,10 @@ export const IngredientStockWidget = () => {
   };
 
   // Execute delete after confirmation
-  const handleExecuteDelete = () => {
+  const handleExecuteDelete = async () => {
     if (!deleteConfirmTarget) return;
     const { id, name } = deleteConfirmTarget;
-    deleteIngredient(id);
+    await deleteIngredient(id);
     showToast(`Bahan baku "${name}" telah dihapus!`);
     setDeleteConfirmTarget(null);
 

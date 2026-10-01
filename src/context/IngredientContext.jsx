@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { ingredientService } from '../services/ingredientService';
+import { supabase } from '../services/supabaseClient';
+import { storeService } from '../services/storeService';
 import { useAuth } from './AuthContext';
 
 const IngredientContext = createContext(null);
@@ -13,7 +15,7 @@ export const IngredientProvider = ({ children }) => {
     setIngredients(ingredientService.getAll());
   }, []);
 
-  // Ambil stok bahan baku terbaru dari Supabase saat aplikasi dibuka / ganti toko
+  // 1. Ambil stok bahan baku terbaru dari Supabase saat aplikasi dibuka / ganti toko
   useEffect(() => {
     ingredientService.fetchFromSupabase().then((res) => {
       if (res) setIngredients(res);
@@ -21,10 +23,55 @@ export const IngredientProvider = ({ children }) => {
     });
   }, [user?.storeId, user?.id, reloadIngredients]);
 
+  // 2. Sinkronkan otomatis saat tab/jendela kembali aktif (misal saat baru buka web setelah hapus di HP)
+  useEffect(() => {
+    const handleSync = () => {
+      ingredientService.fetchFromSupabase().then((res) => {
+        if (res) setIngredients(res);
+      });
+    };
+    window.addEventListener('focus', handleSync);
+    const handleVis = () => {
+      if (document.visibilityState === 'visible') handleSync();
+    };
+    document.addEventListener('visibilitychange', handleVis);
+    return () => {
+      window.removeEventListener('focus', handleSync);
+      document.removeEventListener('visibilitychange', handleVis);
+    };
+  }, []);
+
+  // 3. Supabase Realtime: Dengarkan perubahan insert/update/delete seketika
+  useEffect(() => {
+    const storeId = storeService.getActiveStoreId(user);
+    if (storeService.isDemoStore(storeId)) return;
+
+    const channel = supabase
+      .channel(`realtime_ingredients_${storeId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'ingredients',
+        },
+        () => {
+          ingredientService.fetchFromSupabase().then((res) => {
+            if (res) setIngredients(res);
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.storeId, user?.id]);
+
   // Sync across tabs/storage changes
   useEffect(() => {
     const handleStorageChange = (e) => {
-      if (e.key === 'puko_ingredients_v1') {
+      if (e.key?.startsWith('puko_ingredients')) {
         reloadIngredients();
       }
     };
@@ -72,8 +119,8 @@ export const IngredientProvider = ({ children }) => {
   }, []);
 
   // Delete custom ingredient
-  const deleteIngredient = useCallback((id) => {
-    const updated = ingredientService.deleteIngredient(id);
+  const deleteIngredient = useCallback(async (id) => {
+    const updated = await ingredientService.deleteIngredient(id);
     setIngredients(updated);
     return updated;
   }, []);
@@ -86,8 +133,8 @@ export const IngredientProvider = ({ children }) => {
   }, []);
 
   // Reset to default
-  const resetIngredients = useCallback(() => {
-    const def = ingredientService.resetToDefault();
+  const resetIngredients = useCallback(async () => {
+    const def = await ingredientService.resetToDefault();
     setIngredients(def);
     return def;
   }, []);
