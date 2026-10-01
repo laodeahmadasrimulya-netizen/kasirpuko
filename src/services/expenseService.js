@@ -119,15 +119,9 @@ export const expenseService = {
       }
 
       if (!error && Array.isArray(data)) {
-        if (data.length > 0) {
-          const mapped = data.map(mapFromDB);
-          storageService.set(storageKey, mapped);
-          return mapped;
-        }
-        if (storeId !== DEFAULT_STORE_ID) {
-          const cached = storageService.get(storageKey, []);
-          return cached.map(mapFromDB);
-        }
+        const mapped = data.map(mapFromDB);
+        storageService.set(storageKey, mapped);
+        return mapped;
       }
     } catch (err) {
       console.warn('[expenseService] Gagal load dari Supabase, memakai cache lokal:', err.message);

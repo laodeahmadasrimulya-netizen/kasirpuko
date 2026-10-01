@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { productService } from '../services/productService';
 import { CATEGORIES } from '../data/dummyProducts';
 import { useAuth } from './AuthContext';
+import { supabase } from '../services/supabaseClient';
+import { storeService } from '../services/storeService';
 
 const ProductContext = createContext(null);
 
@@ -14,24 +16,72 @@ export const ProductProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Load products on mount & store change
-  const fetchProducts = useCallback(async () => {
-    setIsLoading(true);
+  // Load products on mount & store change (supports silent background sync)
+  const fetchProducts = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const data = await productService.getAll();
       setProducts(data);
       setError(null);
     } catch (err) {
       console.error('Failed to load products', err);
-      setError('Gagal memuat daftar produk');
+      if (!silent) setError('Gagal memuat daftar produk');
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts, user?.storeId, user?.id]);
+
+  // Realtime subscription via Supabase Postgres Changes
+  useEffect(() => {
+    const storeId = storeService.getActiveStoreId(user);
+    if (storeService.isDemoStore(storeId)) return;
+
+    const channelName = `realtime-products-${storeId}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'products',
+        },
+        (payload) => {
+          const itemStore = payload.new?.store_id || payload.old?.store_id;
+          if (itemStore && itemStore !== storeId) return;
+
+          // Background silent sync
+          fetchProducts(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchProducts, user?.storeId, user?.id]);
+
+  // Refetch when browser window regains focus or tab becomes visible
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchProducts(true);
+    };
+    window.addEventListener('focus', handleFocus);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        handleFocus();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [fetchProducts]);
 
   // Toggle availability (Tersedia / Habis)
   const toggleAvailability = async (id) => {

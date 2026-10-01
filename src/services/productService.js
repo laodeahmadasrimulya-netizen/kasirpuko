@@ -102,26 +102,17 @@ export const productService = {
       }
 
       if (!error && Array.isArray(data)) {
-        if (data.length > 0) {
-          const mapped = data.map(mapFromDB);
-          storageService.set(storageKey, mapped);
-          return mapped;
-        }
-        // Jika toko baru belum memiliki data di Supabase, cek cache lokal
-        if (storeId !== DEFAULT_STORE_ID) {
-          const cached = storageService.get(storageKey, []);
-          if (cached && cached.length > 0) {
-            return cached.map(mapFromDB);
-          }
-        }
+        const mapped = data.map(mapFromDB);
+        storageService.set(storageKey, mapped);
+        return mapped;
       }
     } catch (err) {
       console.warn('[productService] Gagal load dari Supabase, memakai cache lokal:', err.message);
     }
 
-    // Fallback: gunakan storage lokal atau default starter
+    // Fallback saat offline: gunakan storage lokal atau default starter
     let localProducts = storageService.get(storageKey);
-    if (!localProducts || !Array.isArray(localProducts) || localProducts.length === 0) {
+    if (!localProducts || !Array.isArray(localProducts)) {
       localProducts = storeId === DEFAULT_STORE_ID ? DUMMY_PRODUCTS : [];
       storageService.set(storageKey, localProducts);
     }

@@ -4,6 +4,7 @@ import { storageService } from '../services/storageService';
 import { storeService, DEFAULT_STORE_ID } from '../services/storeService';
 import { DEFAULT_SETTINGS } from '../data/dummySettings';
 import { useAuth } from './AuthContext';
+import { supabase } from '../services/supabaseClient';
 
 const SettingsContext = createContext(null);
 
@@ -49,6 +50,54 @@ export const SettingsProvider = ({ children }) => {
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings, user?.storeId, user?.id]);
+
+  // Realtime subscription via Supabase Postgres Changes
+  useEffect(() => {
+    const storeId = storeService.getActiveStoreId(user);
+    if (storeService.isDemoStore(storeId)) return;
+
+    const channelName = `realtime-settings-${storeId}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: storeId === DEFAULT_STORE_ID ? 'store_settings' : 'stores',
+        },
+        (payload) => {
+          if (storeId !== DEFAULT_STORE_ID) {
+            const itemStore = payload.new?.id || payload.old?.id;
+            if (itemStore && itemStore !== storeId) return;
+          }
+          fetchSettings();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchSettings, user?.storeId, user?.id]);
+
+  // Refetch when browser window regains focus or tab becomes visible
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchSettings();
+    };
+    window.addEventListener('focus', handleFocus);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        handleFocus();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [fetchSettings]);
 
   const updateSettings = async (newData) => {
     try {

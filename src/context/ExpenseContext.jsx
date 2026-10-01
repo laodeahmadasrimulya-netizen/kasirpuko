@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { expenseService } from '../services/expenseService';
 import { useAuth } from './AuthContext';
+import { supabase } from '../services/supabaseClient';
+import { storeService } from '../services/storeService';
 
 const ExpenseContext = createContext(null);
 
@@ -18,9 +20,9 @@ export const ExpenseProvider = ({ children }) => {
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load all expenses and summary
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
+  // Load all expenses and summary (supports silent background sync)
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const [list, sum] = await Promise.all([
         expenseService.getAll(),
@@ -31,13 +33,61 @@ export const ExpenseProvider = ({ children }) => {
     } catch (err) {
       console.error('Failed to load expenses:', err);
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
     loadData();
   }, [loadData, user?.storeId, user?.id]);
+
+  // Realtime subscription via Supabase Postgres Changes
+  useEffect(() => {
+    const storeId = storeService.getActiveStoreId(user);
+    if (storeService.isDemoStore(storeId)) return;
+
+    const channelName = `realtime-expenses-${storeId}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'expenses',
+        },
+        (payload) => {
+          const itemStore = payload.new?.store_id || payload.old?.store_id;
+          if (itemStore && itemStore !== storeId) return;
+
+          // Silent background sync
+          loadData(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadData, user?.storeId, user?.id]);
+
+  // Refetch when browser window regains focus or tab becomes visible
+  useEffect(() => {
+    const handleFocus = () => {
+      loadData(true);
+    };
+    window.addEventListener('focus', handleFocus);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        handleFocus();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [loadData]);
 
   // Add new expense
   const addExpense = async (data) => {
