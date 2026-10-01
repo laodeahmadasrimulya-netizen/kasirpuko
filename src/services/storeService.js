@@ -9,11 +9,7 @@ const ACTIVE_STORE_KEY = 'puko_active_store_id';
 export const isPrimaryOwnerEmail = (email) => {
   if (!email) return false;
   const clean = String(email).trim().toLowerCase();
-  return (
-    clean === 'alpukatkocokpuko@gmail.com' ||
-    clean === 'asrial687@gmail.com' ||
-    clean === 'laodeahmadasrimulya@gmail.com'
-  );
+  return clean === 'alpukatkocokpuko@gmail.com';
 };
 
 export const storeService = {
@@ -156,13 +152,19 @@ export const storeService = {
   async createStoreForOwner(ownerId, ownerEmail, storeName) {
     const cleanEmail = (ownerEmail || '').trim().toLowerCase();
     const cleanId = (ownerId || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 14);
-    const storeId = `store_${cleanId}_${Date.now().toString(36)}`;
+    const storeId = `store_${cleanId || 'usr'}_${Date.now().toString(36)}`;
+    const trimmedName = (storeName || '').trim();
+    const initialName = trimmedName
+      ? (trimmedName.toLowerCase().includes('toko') || trimmedName.toLowerCase().includes('pos') || trimmedName.toLowerCase().includes('kedai') || trimmedName.toLowerCase().includes('outlet')
+          ? trimmedName
+          : `Toko ${trimmedName}`)
+      : 'Toko Baru';
     const newStore = {
       id: storeId,
       owner_id: ownerId,
       owner_email: cleanEmail,
-      name: storeName ? `${storeName}'s Store` : 'Toko Baru',
-      tagline: 'Usaha Minuman & Makanan',
+      name: initialName,
+      tagline: 'Kasir POS Modern',
       phone: '',
       address: '',
       created_at: new Date().toISOString(),

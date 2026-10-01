@@ -78,7 +78,7 @@ export const AuthProvider = ({ children }) => {
         if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed.map((u) => {
             let updated = u;
-            if (updated.id === 'usr-admin' || updated.role === 'ADMIN') {
+            if (updated.id === 'usr-admin') {
               if (updated.name === 'Owner / Supervisor' || !updated.name) {
                 updated = { ...updated, name: 'Owner' };
               }
@@ -93,7 +93,7 @@ export const AuthProvider = ({ children }) => {
               updated = { ...updated, avatar: '🥑' };
             }
             if (!updated.storeId && !updated.store_id) {
-              updated = { ...updated, storeId: DEFAULT_STORE_ID, store_id: DEFAULT_STORE_ID };
+              updated = { ...updated, storeId: updated.id === 'usr-admin' ? DEFAULT_STORE_ID : '', store_id: updated.id === 'usr-admin' ? DEFAULT_STORE_ID : '' };
             }
             return updated;
           });
@@ -111,7 +111,7 @@ export const AuthProvider = ({ children }) => {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         let parsed = JSON.parse(saved);
-        if (parsed?.id === 'usr-admin' || parsed?.role === 'ADMIN') {
+        if (parsed?.id === 'usr-admin') {
           if (parsed?.name === 'Owner / Supervisor' || !parsed?.name) {
             parsed = { ...parsed, name: 'Owner' };
           }
@@ -126,7 +126,7 @@ export const AuthProvider = ({ children }) => {
           parsed = { ...parsed, avatar: '🥑' };
         }
         if (!parsed?.storeId && !parsed?.store_id) {
-          parsed = { ...parsed, storeId: DEFAULT_STORE_ID, store_id: DEFAULT_STORE_ID };
+          parsed = { ...parsed, storeId: parsed?.id === 'usr-admin' ? DEFAULT_STORE_ID : '', store_id: parsed?.id === 'usr-admin' ? DEFAULT_STORE_ID : '' };
         }
         return parsed;
       }
@@ -151,7 +151,7 @@ export const AuthProvider = ({ children }) => {
               avatar = parts[0] || '🥑';
               email = parts[1] || email;
             }
-            const sId = u.store_id || (u.id === 'usr-admin' || isPrimaryOwnerEmail(email) ? DEFAULT_STORE_ID : DEFAULT_STORE_ID);
+            const sId = u.store_id || (u.id === 'usr-admin' ? DEFAULT_STORE_ID : '');
             return {
               id: u.id,
               store_id: sId,
@@ -172,21 +172,28 @@ export const AuthProvider = ({ children }) => {
           });
 
           setUsers((prev) => {
-            const hasAdminInDb = mapped.some((m) => m.role === 'ADMIN');
-            let next = mapped;
-            if (!hasAdminInDb) {
-              const currentAdmin = prev.find((p) => p.role === 'ADMIN') || DEFAULT_USERS[0];
-              next = [currentAdmin, ...mapped];
-            }
+            // Gabungkan user dari Supabase dengan user lokal yang aktif agar tidak tertimpa
+            const mapById = new Map();
+            mapped.forEach((item) => mapById.set(item.id, item));
+            prev.forEach((item) => {
+              if (!mapById.has(item.id)) {
+                mapById.set(item.id, item);
+              }
+            });
+            const next = Array.from(mapById.values());
             try {
               localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(next));
             } catch {}
             return next;
           });
+
           setUser((curr) => {
             if (!curr) return curr;
+            // HANYA sinkronkan jika ID persis cocok atau email persis cocok
             const fresh = mapped.find(
-              (m) => m.id === curr.id || (curr.role === 'ADMIN' && m.role === 'ADMIN')
+              (m) =>
+                m.id === curr.id ||
+                (curr.email && m.email && curr.email.toLowerCase() === m.email.toLowerCase())
             );
             if (fresh) {
               const merged = {
@@ -194,6 +201,8 @@ export const AuthProvider = ({ children }) => {
                 name: fresh.name || curr.name,
                 phone: fresh.phone || curr.phone,
                 username: fresh.username || curr.username,
+                storeId: fresh.store_id || curr.storeId,
+                store_id: fresh.store_id || curr.store_id,
               };
               try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
@@ -221,8 +230,7 @@ export const AuthProvider = ({ children }) => {
 
     const isPrimaryOwner =
       authUser.id === 'usr-admin' ||
-      authUser.email?.toLowerCase() === OWNER_EMAIL.toLowerCase() ||
-      isPrimaryOwnerEmail(authUser.email);
+      authUser.email?.toLowerCase() === OWNER_EMAIL.toLowerCase();
 
     let storeId = DEFAULT_STORE_ID;
     if (!isPrimaryOwner) {
@@ -244,7 +252,7 @@ export const AuthProvider = ({ children }) => {
     const resolvedName =
       authUser.user_metadata?.name ||
       matched?.name ||
-      (savedLocalUser?.name && savedLocalUser.name !== 'Owner / Supervisor' ? savedLocalUser.name : '') ||
+      (savedLocalUser?.id === authUser.id && savedLocalUser?.name && savedLocalUser.name !== 'Owner / Supervisor' ? savedLocalUser.name : '') ||
       (isPrimaryOwner ? 'Owner' : authUser.email?.split('@')[0] || 'Pengguna');
 
     const activeUser = {
@@ -261,6 +269,21 @@ export const AuthProvider = ({ children }) => {
       roleBadgeColor: 'bg-amber-400/20 text-amber-300 border-amber-400/30',
     };
     setUser(activeUser);
+
+    // Sync to public.users Supabase table so all devices and sessions recognize this Owner
+    try {
+      supabase.from('users').upsert({
+        id: authUser.id,
+        store_id: storeId,
+        username: activeUser.username,
+        name: activeUser.name,
+        role: 'ADMIN',
+        phone: activeUser.phone || '',
+        avatar: activeUser.avatar || '🥑',
+      }).then(({ error }) => {
+        if (error) console.warn('[syncSessionUser] upsert user error:', error);
+      });
+    } catch {}
 
     // Ensure the active user exists in users state
     setUsers((prev) => {
@@ -406,6 +429,22 @@ export const AuthProvider = ({ children }) => {
           };
           setUser(activeUser);
 
+          // Pastikan akun tersimpan di tabel public.users Supabase
+          try {
+            await supabase.from('users').upsert({
+              id: data.user.id,
+              store_id: storeId,
+              username: activeUser.username,
+              name: activeUser.name,
+              role: 'ADMIN',
+              phone: activeUser.phone || '',
+              avatar: activeUser.avatar || '🥑',
+              pin: trimmedSecret.slice(0, 8) || '1234',
+            });
+          } catch (e) {
+            console.warn('[login] upsert user notice:', e);
+          }
+
           setUsers((prev) => {
             const exists = prev.some(
               (u) =>
@@ -431,7 +470,7 @@ export const AuthProvider = ({ children }) => {
                 store_id: storeId,
                 username: activeUser.username,
                 email: data.user.email,
-                pin: trimmedSecret.slice(0, 6) || '1234',
+                pin: trimmedSecret.slice(0, 8) || '1234',
                 name: activeUser.name,
                 role: 'ADMIN',
                 phone: activeUser.phone,
@@ -461,7 +500,6 @@ export const AuthProvider = ({ children }) => {
     }
 
     // 2. Check local/database users list (Supports Name, Username, Phone, and Email for both Admin and Kasir)
-    // Selalu ambil data terbaru dari Supabase agar perubahan sandi/nama di satu perangkat (misal laptop) langsung sinkron di perangkat lain (misal HP)
     let currentUsers = users;
     try {
       const { data: dbUsers, error: dbError } = await supabase.from('users').select('*');
@@ -474,7 +512,7 @@ export const AuthProvider = ({ children }) => {
             avatar = parts[0] || '🥑';
             email = parts[1] || email;
           }
-          const sId = u.store_id || DEFAULT_STORE_ID;
+          const sId = u.store_id || (u.id === 'usr-admin' ? DEFAULT_STORE_ID : '');
           return {
             id: u.id,
             store_id: sId,
@@ -494,12 +532,20 @@ export const AuthProvider = ({ children }) => {
           };
         });
         currentUsers = mapped;
-        setUsers(mapped);
-        try {
-          localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(mapped));
-        } catch {
-          // ignore
-        }
+        setUsers((prev) => {
+          const mapById = new Map();
+          mapped.forEach((item) => mapById.set(item.id, item));
+          prev.forEach((item) => {
+            if (!mapById.has(item.id)) {
+              mapById.set(item.id, item);
+            }
+          });
+          const mergedList = Array.from(mapById.values());
+          try {
+            localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(mergedList));
+          } catch {}
+          return mergedList;
+        });
       }
     } catch (err) {
       console.warn('Gagal sinkronisasi data user dari Supabase saat login:', err);
@@ -517,13 +563,13 @@ export const AuthProvider = ({ children }) => {
 
     const isMatch = (u) => {
       const uPhone = normalizePhone(u.phone);
-      const uEmail = (u.email || (u.role === 'ADMIN' ? OWNER_EMAIL : '')).toLowerCase();
+      const uEmail = (u.email || (u.id === 'usr-admin' ? OWNER_EMAIL : '')).toLowerCase();
       const uUsername = (u.username || '').toLowerCase();
       const uName = (u.name || '').toLowerCase();
 
       const phoneMatched =
         Boolean(normalizedIdPhone) &&
-        (uPhone === normalizedIdPhone || (u.role === 'ADMIN' && storePhone === normalizedIdPhone));
+        (uPhone === normalizedIdPhone || (u.id === 'usr-admin' && storePhone === normalizedIdPhone));
 
       const idMatched =
         uUsername === trimmedId.toLowerCase() ||
@@ -537,44 +583,50 @@ export const AuthProvider = ({ children }) => {
     const found = currentUsers.find(isMatch);
 
     if (found) {
-      const userStoreId = found.storeId || found.store_id || (found.id === 'usr-admin' || (found.role === 'ADMIN' && found.email === OWNER_EMAIL) ? DEFAULT_STORE_ID : DEFAULT_STORE_ID);
-      storeService.setActiveStoreId(userStoreId);
+      let userStoreId = found.storeId || found.store_id || (found.id === 'usr-admin' ? DEFAULT_STORE_ID : null);
+      if (userStoreId) {
+        storeService.setActiveStoreId(userStoreId);
+      }
 
       // If it's ADMIN:
       if (found.role === 'ADMIN') {
         // Try authenticating with Supabase Auth using Owner's email
         try {
-          const authAttempt = await supabase.auth.signInWithPassword({
-            email: found.email || OWNER_EMAIL,
-            password: trimmedSecret,
-          });
-          if (!authAttempt.error && authAttempt.data.user) {
-            let storeId = userStoreId;
-            if (found.email && found.email.toLowerCase() !== OWNER_EMAIL.toLowerCase()) {
-              const store = await storeService.getOrCreateStoreForOwner(
-                authAttempt.data.user.id,
-                authAttempt.data.user.email,
-                found.name
-              );
-              storeId = store.id;
-            }
-            storeService.setActiveStoreId(storeId);
+          const authEmail = found.email || (found.id === 'usr-admin' ? OWNER_EMAIL : '');
+          if (authEmail) {
+            const authAttempt = await supabase.auth.signInWithPassword({
+              email: authEmail,
+              password: trimmedSecret,
+            });
+            if (!authAttempt.error && authAttempt.data.user) {
+              let storeId = userStoreId;
+              if (found.id !== 'usr-admin' && authEmail.toLowerCase() !== OWNER_EMAIL.toLowerCase()) {
+                const store = await storeService.getOrCreateStoreForOwner(
+                  authAttempt.data.user.id,
+                  authAttempt.data.user.email,
+                  found.name
+                );
+                storeId = store.id;
+              }
+              if (!storeId) storeId = DEFAULT_STORE_ID;
+              storeService.setActiveStoreId(storeId);
 
-            const activeUser = {
-              id: authAttempt.data.user.id,
-              email: authAttempt.data.user.email,
-              name: found.name || 'Owner',
-              role: 'ADMIN',
-              username: found.username || 'admin',
-              phone: found.phone || '',
-              avatar: '🥑',
-              storeId: storeId,
-              store_id: storeId,
-              roleLabel: 'Admin / Owner',
-              roleBadgeColor: 'bg-amber-400/20 text-amber-300 border-amber-400/30',
-            };
-            setUser(activeUser);
-            return { success: true, user: activeUser };
+              const activeUser = {
+                id: authAttempt.data.user.id,
+                email: authAttempt.data.user.email,
+                name: found.name || 'Owner',
+                role: 'ADMIN',
+                username: found.username || authAttempt.data.user.email.split('@')[0],
+                phone: found.phone || '',
+                avatar: '🥑',
+                storeId: storeId,
+                store_id: storeId,
+                roleLabel: 'Admin / Owner',
+                roleBadgeColor: 'bg-amber-400/20 text-amber-300 border-amber-400/30',
+              };
+              setUser(activeUser);
+              return { success: true, user: activeUser };
+            }
           }
         } catch (e) {
           // ignore fallback
@@ -1199,21 +1251,19 @@ export const AuthProvider = ({ children }) => {
     const uStore =
       u.storeId ||
       u.store_id ||
-      (u.id === 'usr-admin' || (u.role === 'ADMIN' && (isPrimaryOwnerEmail(u.email) || u.email?.toLowerCase() === OWNER_EMAIL.toLowerCase()))
-        ? DEFAULT_STORE_ID
-        : DEFAULT_STORE_ID);
+      (u.id === 'usr-admin' ? DEFAULT_STORE_ID : '');
     return uStore === activeStoreId;
   });
 
   // Pastikan akun Owner aktif selalu muncul di daftar pengguna (visibleUsers) tokonya
   const hasOwner = visibleUsers.some((u) => u.role === 'ADMIN');
   if (!hasOwner) {
-    if (user && user.role === 'ADMIN') {
+    if (user && user.role === 'ADMIN' && (user.storeId === activeStoreId || user.store_id === activeStoreId)) {
       visibleUsers = [{ ...user, storeId: activeStoreId, store_id: activeStoreId }, ...visibleUsers];
-    } else {
-      const adminCandidate = users.find((u) => u.role === 'ADMIN') || DEFAULT_USERS[0];
+    } else if (activeStoreId === DEFAULT_STORE_ID) {
+      const adminCandidate = users.find((u) => u.id === 'usr-admin') || DEFAULT_USERS[0];
       if (adminCandidate) {
-        visibleUsers = [{ ...adminCandidate, storeId: activeStoreId, store_id: activeStoreId }, ...visibleUsers];
+        visibleUsers = [{ ...adminCandidate, storeId: DEFAULT_STORE_ID, store_id: DEFAULT_STORE_ID }, ...visibleUsers];
       }
     }
   }
@@ -1365,13 +1415,13 @@ export const AuthProvider = ({ children }) => {
     const isTargetAdmin =
       id === 'usr-admin' ||
       data.role === 'ADMIN' ||
-      (user && user.role === 'ADMIN' && (id === user.id || id === 'usr-admin'));
+      (user && user.id === id && user.role === 'ADMIN');
 
     let updated = null;
     let nextUsersList = [];
     setUsers((prev) => {
       nextUsersList = prev.map((item) => {
-        const isMatch = item.id === id || (isTargetAdmin && item.role === 'ADMIN');
+        const isMatch = item.id === id;
         if (isMatch) {
           updated = {
             ...item,
@@ -1379,7 +1429,7 @@ export const AuthProvider = ({ children }) => {
             username: cleanUsername || item.username,
             pin: data.pin !== undefined ? String(data.pin).trim() : item.pin,
             phone: data.phone !== undefined ? String(data.phone).trim() : item.phone,
-            email: item.role === 'ADMIN'
+            email: item.id === 'usr-admin'
               ? (data.email || item.email || OWNER_EMAIL)
               : (data.email !== undefined ? data.email.trim().toLowerCase() : item.email),
           };
@@ -1395,10 +1445,8 @@ export const AuthProvider = ({ children }) => {
       return nextUsersList;
     });
 
-    // 1. Sync active session
-    const isCurrentLoggedIn = Boolean(
-      user && (user.id === id || (user.role === 'ADMIN' && isTargetAdmin))
-    );
+    // 1. Sync active session jika user yang sedang login yang diedit
+    const isCurrentLoggedIn = Boolean(user && user.id === id);
 
     if (isCurrentLoggedIn && updated) {
       const activeUpdate = {
@@ -1416,8 +1464,8 @@ export const AuthProvider = ({ children }) => {
       }
     }
 
-    // 2. Jika target adalah Owner/Admin, update juga metadata dan password di Supabase Auth!
-    if (isTargetAdmin) {
+    // 2. Jika target adalah akun yang sedang login, update juga metadata di Supabase Auth!
+    if (isCurrentLoggedIn) {
       try {
         const authUpdates = {
           data: {
@@ -1462,29 +1510,17 @@ export const AuthProvider = ({ children }) => {
           .eq('id', targetDbId)
           .select();
 
-        // Jika akun Owner dan tidak ada baris yang berubah (misal mismatch ID antara uuid Supabase auth & usr-admin)
-        if (isTargetAdmin && (!updatedRows || updatedRows.length === 0)) {
-          const { data: adminRows } = await supabase
-            .from('users')
-            .update(payload)
-            .eq('id', 'usr-admin')
-            .select();
-
-          if (!adminRows || adminRows.length === 0) {
-            const { data: roleAdminRows } = await supabase
-              .from('users')
-              .update(payload)
-              .eq('role', 'ADMIN')
-              .select();
-
-            if (!roleAdminRows || roleAdminRows.length === 0) {
-              await supabase.from('users').upsert({
-                id: targetDbId,
-                store_id: updated.store_id || DEFAULT_STORE_ID,
-                role: 'ADMIN',
-                ...payload,
-              });
-            }
+        // Jika baris belum ada di public.users, upsert dengan store_id yang benar
+        if (!updatedRows || updatedRows.length === 0) {
+          if (id === 'usr-admin') {
+            await supabase.from('users').update(payload).eq('id', 'usr-admin');
+          } else {
+            await supabase.from('users').upsert({
+              id: targetDbId,
+              store_id: updated.store_id || updated.storeId || storeService.getActiveStoreId(user),
+              role: updated.role || 'KASIR',
+              ...payload,
+            });
           }
         }
 

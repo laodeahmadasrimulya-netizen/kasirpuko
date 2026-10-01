@@ -40,6 +40,20 @@ const mapToDB = (data) => ({
   updated_at: new Date().toISOString(),
 });
 
+export const getCleanStoreSettings = (storeInfo = null) => ({
+  storeName: storeInfo?.name || 'Toko Saya',
+  tagline: storeInfo?.tagline || 'Kasir POS Modern',
+  branch: 'Outlet Utama',
+  address: storeInfo?.address || '',
+  phone: storeInfo?.phone || '',
+  cashierName: 'Kasir',
+  receiptFooter: 'Terima kasih atas kunjungan Anda!\nSemoga hari Anda menyenangkan.',
+  taxRate: 0,
+  serviceRate: 0,
+  enableSound: true,
+  autoPrintReceipt: false,
+});
+
 export const settingsService = {
   /**
    * Mengambil konfigurasi toko aktif dari Supabase / Local Storage
@@ -90,29 +104,28 @@ export const settingsService = {
       } catch (err) {
         console.warn('[settingsService] Gagal load dari Supabase, memakai cache lokal:', err.message);
       }
+      const local = storageService.get(storageKey);
+      return { ...DEFAULT_SETTINGS, ...(local || {}) };
     }
 
+    // Toko Owner Mandiri / Non-Default Store
+    const cleanDefaults = getCleanStoreSettings(storeInfo);
     let settings = storageService.get(storageKey);
     if (!settings) {
-      settings = {
-        ...DEFAULT_SETTINGS,
-        storeName: storeInfo?.name || (storeId === DEFAULT_STORE_ID ? 'PUKO' : 'Toko Baru'),
-        tagline: storeInfo?.tagline || (storeId === DEFAULT_STORE_ID ? 'Alpukat Kocok No Serat No Pahit' : 'Kasir POS Modern'),
-        phone: storeInfo?.phone || (storeId === DEFAULT_STORE_ID ? '085652103647' : ''),
-        address: storeInfo?.address || (storeId === DEFAULT_STORE_ID ? 'Kendari' : ''),
-      };
+      settings = cleanDefaults;
       storageService.set(storageKey, settings);
-    } else if (storeInfo && storeId !== DEFAULT_STORE_ID) {
+    } else {
       settings = {
+        ...cleanDefaults,
         ...settings,
-        storeName: storeInfo.name || settings.storeName,
-        tagline: storeInfo.tagline !== undefined ? storeInfo.tagline : settings.tagline,
-        phone: storeInfo.phone !== undefined ? storeInfo.phone : settings.phone,
-        address: storeInfo.address !== undefined ? storeInfo.address : settings.address,
+        storeName: storeInfo?.name || settings.storeName || cleanDefaults.storeName,
+        tagline: storeInfo?.tagline !== undefined ? storeInfo.tagline : settings.tagline,
+        phone: storeInfo?.phone !== undefined ? storeInfo.phone : settings.phone,
+        address: storeInfo?.address !== undefined ? storeInfo.address : settings.address,
       };
       storageService.set(storageKey, settings);
     }
-    return { ...DEFAULT_SETTINGS, ...settings };
+    return settings;
   },
 
   /**
